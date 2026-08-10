@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/selah_widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="#F5DFBC">
+
+    <TextView
+        android:id="@+id/selah_widget_quote"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:text="Selah"
+        android:textColor="#191919"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:maxLines="6"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/selah_widget_cite"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Selah"
+        android:textColor="#99191919"
+        android:textSize="12sp" />
+</LinearLayout>

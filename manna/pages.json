@@ -1,0 +1,118 @@
+{
+	"pages": [
+		{
+			"path": "pages/home/home",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/quiz/quiz",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/devotion/list",
+			"style": {
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/bible/bible",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/profile/profile",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		}
+	],
+	"subPackages": [
+		{
+			"root": "pagesA",
+			"pages": [
+				{ "path": "welcome/welcome", "style": { "navigationStyle": "custom" } },
+				{ "path": "login/login", "style": { "navigationStyle": "custom" } },
+				{ "path": "legal/legal", "style": { "navigationStyle": "custom" } },
+				{ "path": "settings/settings", "style": { "navigationStyle": "custom" } },
+				{ "path": "devotion/detail", "style": { "navigationStyle": "custom" } },
+				{ "path": "devotion/session", "style": { "navigationStyle": "custom" } },
+				{ "path": "quiz/play", "style": { "navigationStyle": "custom" } },
+				{ "path": "quiz/result", "style": { "navigationStyle": "custom" } },
+				{ "path": "quiz/stories", "style": { "navigationStyle": "custom" } },
+				{ "path": "quiz/story-unlock", "style": { "navigationStyle": "custom" } },
+				{ "path": "quiz/story-learn", "style": { "navigationStyle": "custom" } },
+				{ "path": "quiz/story-done", "style": { "navigationStyle": "custom" } },
+				{ "path": "quiz/in-bible", "style": { "navigationStyle": "custom" } },
+				{ "path": "bible/listen", "style": { "navigationStyle": "custom" } },
+				{ "path": "prayer/prayer", "style": { "navigationStyle": "custom" } },
+				{ "path": "profile/collections", "style": { "navigationStyle": "custom" } },
+				{ "path": "profile/badges", "style": { "navigationStyle": "custom" } },
+				{ "path": "profile/ledger", "style": { "navigationStyle": "custom" } },
+				{ "path": "share/versecard", "style": { "navigationStyle": "custom" } },
+				{ "path": "calendar/calendar", "style": { "navigationStyle": "custom" } },
+				{ "path": "vip/vip", "style": { "navigationStyle": "custom" } },
+				{ "path": "interstitial/interstitial", "style": { "navigationStyle": "custom" } }
+			]
+		}
+	],
+	"tabBar": {
+		"color": "#8a8a8a",
+		"selectedColor": "#ffffff",
+		"borderStyle": "black",
+		"backgroundColor": "#000000",
+		"custom": false,
+		"list": [
+			{
+				"pagePath": "pages/home/home",
+				"text": "Home",
+				"iconPath": "static/tab/home.png",
+				"selectedIconPath": "static/tab/home-active.png"
+			},
+			{
+				"pagePath": "pages/quiz/quiz",
+				"text": "Quiz",
+				"iconPath": "static/tab/quiz.png",
+				"selectedIconPath": "static/tab/quiz-active.png"
+			},
+			{
+				"pagePath": "pages/devotion/list",
+				"text": "Devotion",
+				"iconPath": "static/tab/devotion.png",
+				"selectedIconPath": "static/tab/devotion-active.png"
+			},
+			{
+				"pagePath": "pages/bible/bible",
+				"text": "Bible",
+				"iconPath": "static/tab/bible.png",
+				"selectedIconPath": "static/tab/bible-active.png"
+			},
+			{
+				"pagePath": "pages/profile/profile",
+				"text": "Me",
+				"iconPath": "static/tab/me.png",
+				"selectedIconPath": "static/tab/me-active.png"
+			}
+		]
+	},
+	"globalStyle": {
+		"navigationBarTextStyle": "white",
+		"navigationBarTitleText": "Manna",
+		"navigationBarBackgroundColor": "#0a0a0a",
+		"backgroundColor": "#0a0a0a",
+		"backgroundTextStyle": "light"
+	},
+	"easycom": {
+		"autoscan": true,
+		"custom": {
+			"^u-(.*)": "uview-plus/components/u-$1/u-$1.vue",
+			"^manna-(.*)": "@/components/manna-$1/manna-$1.vue",
+			"^l-(.*)": "lime-painter/components/l-$1/l-$1.vue"
+		}
+	}
+}

@@ -1,0 +1,106 @@
+{
+	"pages": [
+		{
+			"path": "pages/boot/boot",
+			"style": {
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/home/home",
+			"style": {
+				"navigationStyle": "custom",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/ai/ai",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/profile/profile",
+			"style": {
+				"navigationStyle": "custom"
+			}
+		}
+	],
+	"subPackages": [
+		{
+			"root": "pagesA",
+			"pages": [
+				{ "path": "welcome/welcome", "style": { "navigationStyle": "custom" } },
+				{ "path": "interstitial/interstitial", "style": { "navigationStyle": "custom" } },
+				{ "path": "onboarding/onboarding", "style": { "navigationStyle": "custom" } },
+				{ "path": "reminders/reminders", "style": { "navigationStyle": "custom" } },
+				{ "path": "alarm/alarm", "style": { "navigationStyle": "custom" } },
+				{ "path": "prayer-lock/prayer-lock", "style": { "navigationStyle": "custom" } },
+				{ "path": "prayer-lock/apps", "style": { "navigationStyle": "custom" } },
+				{ "path": "login/login", "style": { "navigationStyle": "custom" } },
+				{ "path": "widgets/widgets", "style": { "navigationStyle": "custom" } },
+				{ "path": "icons/icons", "style": { "navigationStyle": "custom" } },
+				{ "path": "compose/compose", "style": { "navigationStyle": "custom" } },
+				{ "path": "quiz/quiz", "style": { "navigationStyle": "custom" } },
+				{ "path": "quiz/play", "style": { "navigationStyle": "custom" } },
+				{ "path": "quiz/result", "style": { "navigationStyle": "custom" } },
+				{ "path": "watch/watch", "style": { "navigationStyle": "custom" } },
+				{ "path": "widget-teaser/widget-teaser", "style": { "navigationStyle": "custom" } },
+				{ "path": "icon-teaser/icon-teaser", "style": { "navigationStyle": "custom" } },
+				{ "path": "checkin/checkin", "style": { "navigationStyle": "custom" } },
+				{ "path": "share/share", "style": { "navigationStyle": "custom" } },
+				{ "path": "vip/vip", "style": { "navigationStyle": "custom" } },
+				{ "path": "topics/topics", "style": { "navigationStyle": "custom" } },
+				{ "path": "topics/detail", "style": { "navigationStyle": "custom" } },
+				{ "path": "wallpaper/wallpaper", "style": { "navigationStyle": "custom" } },
+				{ "path": "settings/settings", "style": { "navigationStyle": "custom" } },
+				{ "path": "legal/legal", "style": { "navigationStyle": "custom" } },
+				{ "path": "assets/assets", "style": { "navigationStyle": "custom" } }
+			]
+		}
+	],
+	"tabBar": {
+		"color": "#8a8a8a",
+		"selectedColor": "#191919",
+		"borderStyle": "white",
+		"backgroundColor": "#fbf8f2",
+		"list": [
+			{
+				"pagePath": "pages/home/home",
+				"text": "Home",
+				"iconPath": "static/tab/home.png",
+				"selectedIconPath": "static/tab/home-active.png"
+			},
+			{
+				"pagePath": "pages/ai/ai",
+				"text": "AI",
+				"iconPath": "static/tab/ai.png",
+				"selectedIconPath": "static/tab/ai-active.png"
+			},
+			{
+				"pagePath": "pages/profile/profile",
+				"text": "Me",
+				"iconPath": "static/tab/me.png",
+				"selectedIconPath": "static/tab/me-active.png"
+			}
+		]
+	},
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "Selah",
+		"navigationBarBackgroundColor": "#fbf8f2",
+		"backgroundColor": "#fbf8f2",
+		"backgroundTextStyle": "dark"
+	},
+	"easycom": {
+		"autoscan": true,
+		"custom": {
+			"^selah-(.*)": "@/components/selah-$1/selah-$1.vue",
+			"^u-(.*)": "uview-plus/components/u-$1/u-$1.vue",
+			"^up-(.*)": "uview-plus/components/u-$1/u-$1.vue",
+			"^l-(.*)": "lime-painter/components/l-$1/l-$1.vue"
+		}
+	},
+	"uniIdRouter": {}
+}

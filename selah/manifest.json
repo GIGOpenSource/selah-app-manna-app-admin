@@ -1,0 +1,92 @@
+{
+    "name" : "Selah",
+    "appid" : "__UNI__29C6C75",
+    "description" : "Selah — daily affirmations and gentle devotion",
+    "versionName" : "1.0.0",
+    "versionCode" : "100",
+    "transformPx" : false,
+    "app-plus" : {
+        "usingComponents" : true,
+        "nvueStyleCompiler" : "uni-app",
+        "compilerVersion" : 3,
+        "splashscreen" : {
+            "alwaysShowBeforeRender" : false,
+            "waiting" : false,
+            "autoclose" : true,
+            "delay" : 0
+        },
+        "modules" : {},
+        "distribute" : {
+            "android" : {
+                "permissions" : [
+                    "<uses-permission android:name=\"android.permission.CHANGE_NETWORK_STATE\"/>",
+                    "<uses-permission android:name=\"android.permission.VIBRATE\"/>",
+                    "<uses-permission android:name=\"android.permission.ACCESS_WIFI_STATE\"/>",
+                    "<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\"/>",
+                    "<uses-permission android:name=\"android.permission.WAKE_LOCK\"/>",
+                    "<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\"/>",
+                    "<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\"/>"
+                ]
+            },
+            "ios" : {
+                "capabilities" : {
+                    "entitlements" : {
+                        "com.apple.developer.associated-domains" : [ "applinks:selah.app" ],
+                        "com.apple.security.application-groups" : [ "group.com.selah.app" ]
+                    }
+                },
+                "urltypes" : "selah",
+                "privacyDescription" : {
+                    "NSPhotoLibraryAddUsageDescription" : "Save affirmation cards to your photo library",
+                    "NSPhotoLibraryUsageDescription" : "Save affirmation cards to your photo library"
+                }
+            },
+            "sdkConfigs" : {
+                "share" : {},
+                "oauth" : {
+                    "apple" : {},
+                    "google" : {}
+                },
+                "payment" : {
+                    "appleiap" : {}
+                }
+            }
+        },
+        "nativePlugins" : {
+            "SelahNative" : {
+                "__plugin_info__" : {
+                    "name" : "SelahNative",
+                    "description" : "Widget payload + alternate icon",
+                    "platforms" : "Android,iOS",
+                    "url" : "",
+                    "android_package_name" : "",
+                    "ios_bundle_id" : "",
+                    "isCloud" : false,
+                    "bought" : -1,
+                    "pid" : "",
+                    "parameters" : {}
+                }
+            }
+        }
+    },
+    "quickapp" : {},
+    "mp-weixin" : {
+        "appid" : "",
+        "setting" : {
+            "urlCheck" : false,
+            "postcss" : true,
+            "minified" : true
+        },
+        "usingComponents" : true,
+        "uniStatistics" : {
+            "enable" : false
+        }
+    },
+    "mp-alipay" : {
+        "usingComponents" : true
+    },
+    "uniStatistics" : {
+        "enable" : false
+    },
+    "vueVersion" : "3"
+}

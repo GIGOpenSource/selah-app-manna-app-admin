@@ -1,0 +1,104 @@
+/**
+ * Selah UI tokens — aligned to Figma file 8HrsHSUQG2WbBfEdBzLHcx
+ * (light lavender→cream system). Visual only; do not encode business rules here.
+ */
+$selah-bg: #fbf8f2;
+$selah-bg-gray: #f5f5f5;
+$selah-ink: #191919;
+$selah-ink-soft: #5c5c5c;
+$selah-muted: #8a8a8a;
+$selah-card: #ffffff;
+$selah-accent: #c5c3e8;
+$selah-grad-top: #b6badf;
+$selah-grad-mid: #fff0d9;
+$selah-grad-bot: #f5dfbc;
+$selah-grad-peach: #fbeed8;
+$selah-radius-btn: 32rpx;
+$selah-radius-card: 32rpx;
+$selah-radius-pill: 999rpx;
+/* Libre Baskerville 入包（static/fonts）；回落系统衬线 */
+$selah-font-display: "SelahDisplay", "Libre Baskerville", "Times New Roman", "Iowan Old Style", Palatino, Georgia, serif;
+$selah-font-body: "SF Pro Text", "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+$selah-glass: rgba(255, 255, 255, 0.56);
+$selah-shadow: 0 8rpx 80rpx rgba(0, 0, 0, 0.1);
+$selah-divider: rgba(25, 25, 25, 0.06);
+
+@mixin selah-page-gradient {
+	background-color: $selah-bg;
+	background-image: linear-gradient(180deg, $selah-grad-top 0%, $selah-grad-mid 45%, $selah-grad-bot 100%);
+}
+
+@mixin selah-page-cream {
+	background-color: $selah-bg;
+	background-image: linear-gradient(180deg, $selah-bg 0%, $selah-grad-mid 100%);
+	color: $selah-ink;
+}
+
+@mixin selah-glass-pill {
+	background: $selah-glass;
+	border-radius: $selah-radius-pill;
+	box-shadow: $selah-shadow;
+}
+
+@mixin selah-nav-circle {
+	width: 88rpx;
+	height: 88rpx;
+	border-radius: 50%;
+	background: $selah-glass;
+	box-shadow: $selah-shadow;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+@mixin selah-display-title {
+	font-family: $selah-font-display;
+	font-weight: 700;
+	color: $selah-ink;
+}
+
+/** 可滚动页吸顶容器（配合内部 .head-glass） */
+@mixin selah-sticky-head {
+	position: sticky;
+	top: 0;
+	z-index: 100;
+}
+
+/**
+ * 吸顶毛玻璃层：底色上实下透；mask 让模糊强度同样自上而下由强变弱。
+ * 左右 100vw 通栏（不受页面水平 padding 裁切）；正文放在其上。
+ */
+@mixin selah-sticky-head-glass($bg: $selah-bg-gray) {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 50%;
+	width: 100vw;
+	margin-left: -50vw;
+	z-index: 0;
+	pointer-events: none;
+	-webkit-backdrop-filter: blur(32rpx) saturate(1.2);
+	backdrop-filter: blur(32rpx) saturate(1.2);
+	background-color: transparent;
+	background-image: linear-gradient(
+		180deg,
+		rgba($bg, 0.94) 0%,
+		rgba($bg, 0.82) 55%,
+		rgba($bg, 0.35) 82%,
+		rgba($bg, 0) 100%
+	);
+	-webkit-mask-image: linear-gradient(
+		180deg,
+		#000 0%,
+		#000 48%,
+		rgba(0, 0, 0, 0.45) 75%,
+		transparent 100%
+	);
+	mask-image: linear-gradient(
+		180deg,
+		#000 0%,
+		#000 48%,
+		rgba(0, 0, 0, 0.45) 75%,
+		transparent 100%
+	);
+}

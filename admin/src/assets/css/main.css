@@ -1,0 +1,390 @@
+* {
+	margin: 0;
+	padding: 0;
+	outline: 0 !important;
+	box-sizing: border-box;
+}
+
+body {
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+		'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+		'Noto Color Emoji', 'PingFang SC', 'microsoft yahei';
+	color: rgba(0, 0, 0, 0.88);
+	font-size: 14px;
+	background: #f0f2f5;
+	-webkit-font-smoothing: antialiased;
+}
+
+a {
+	text-decoration: none;
+}
+
+i {
+	font-style: normal;
+}
+
+/* Ant Design Pro / table-list tokens (Element Plus 框架不变) */
+:root {
+	--pro-primary: #1677ff;
+	--pro-primary-hover: #4096ff;
+	--pro-primary-active: #0958d9;
+	--pro-bg-layout: #f0f2f5;
+	--pro-bg-container: #ffffff;
+	--pro-border: #f0f0f0;
+	--pro-border-secondary: #d9d9d9;
+	--pro-text: rgba(0, 0, 0, 0.88);
+	--pro-text-secondary: rgba(0, 0, 0, 0.65);
+	--pro-text-tertiary: rgba(0, 0, 0, 0.45);
+	--pro-header-height: 48px;
+	--pro-sider-bg: #001529;
+	--pro-sider-text: rgba(255, 255, 255, 0.65);
+	--pro-sider-text-active: #fff;
+	--pro-radius: 8px;
+	--pro-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03), 0 1px 6px -1px rgba(0, 0, 0, 0.02),
+		0 2px 4px 0 rgba(0, 0, 0, 0.02);
+
+	--header-bg-color: #001529;
+	--header-text-color: #fff;
+	--active-color: var(--pro-primary);
+
+	--el-color-primary: #1677ff;
+	--el-color-primary-light-3: #69b1ff;
+	--el-color-primary-light-5: #91caff;
+	--el-color-primary-light-7: #bae0ff;
+	--el-color-primary-light-8: #d6e4ff;
+	--el-color-primary-light-9: #e6f4ff;
+	--el-color-primary-dark-2: #0958d9;
+	--el-border-radius-base: 6px;
+	--el-font-size-base: 14px;
+	--el-text-color-primary: rgba(0, 0, 0, 0.88);
+	--el-text-color-regular: rgba(0, 0, 0, 0.88);
+	--el-text-color-secondary: rgba(0, 0, 0, 0.65);
+	--el-text-color-placeholder: rgba(0, 0, 0, 0.25);
+	--el-border-color: #d9d9d9;
+	--el-border-color-light: #f0f0f0;
+	--el-border-color-lighter: #f0f0f0;
+	--el-border-color-extra-light: #f5f5f5;
+	--el-fill-color-blank: #fff;
+	--el-bg-color: #fff;
+	--el-bg-color-page: #f0f2f5;
+	--el-box-shadow: var(--pro-shadow);
+	--el-component-size: 32px;
+}
+
+/* —— ProTable 卡片容器 —— */
+.container {
+	padding: 0;
+	background: var(--pro-bg-container);
+	border: none;
+	border-radius: var(--pro-radius);
+	box-shadow: var(--pro-shadow);
+	/* 允许宽表横向滚动；勿用 hidden 裁切滚动条 */
+	overflow-x: auto;
+	overflow-y: visible;
+}
+
+/* —— 查询区（table-list search） —— */
+.handle-box,
+.pro-search {
+	display: flex;
+	flex-wrap: nowrap;
+	align-items: center;
+	gap: 12px 16px;
+	padding: 24px 24px 16px;
+	margin-bottom: 0;
+	background: var(--pro-bg-container);
+	overflow-x: auto;
+	overflow-y: hidden;
+	-webkit-overflow-scrolling: touch;
+	border-bottom: 1px solid var(--pro-border);
+}
+
+.pro-search > *,
+.handle-box > * {
+	flex-shrink: 0;
+}
+
+.pro-search-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+}
+
+/* —— 工具栏（headerTitle + 操作） —— */
+.pro-toolbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 16px 24px;
+	min-height: 64px;
+}
+
+.pro-toolbar-title {
+	font-size: 16px;
+	font-weight: 500;
+	color: var(--pro-text);
+	line-height: 24px;
+}
+
+.pro-toolbar-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	flex-shrink: 0;
+}
+
+/* 无独立 toolbar 时，查询区下方表格留白 */
+.handle-box + .el-table,
+.pro-search + .el-table {
+	margin-top: 0;
+}
+
+.container > .el-table,
+.container > .el-form + .el-table {
+	/* table flush in card */
+}
+
+.container > .handle-box + .pro-toolbar,
+.container > .pro-search + .pro-toolbar {
+	padding-top: 16px;
+}
+
+/* 表格贴合卡片左右内边距视觉：表头与内容区 */
+.container > .el-table {
+	--el-table-border-color: var(--pro-border);
+}
+
+.container > .pagination,
+.container > .el-pagination {
+	padding: 16px 24px 24px;
+}
+
+/* —— Element Plus Table → ProTable 观感 —— */
+.el-table {
+	--el-table-header-bg-color: #fafafa;
+	--el-table-header-text-color: rgba(0, 0, 0, 0.88);
+	--el-table-row-hover-bg-color: #fafafa;
+	--el-table-border-color: #f0f0f0;
+	--el-table-text-color: rgba(0, 0, 0, 0.88);
+	--el-table-bg-color: #fff;
+	--el-table-tr-bg-color: #fff;
+	font-size: 14px;
+}
+
+.el-table th.el-table__cell {
+	background-color: #fafafa !important;
+	font-weight: 500;
+	color: rgba(0, 0, 0, 0.88);
+	padding: 12px 16px;
+	white-space: nowrap;
+}
+
+.el-table td.el-table__cell {
+	padding: 12px 16px;
+	white-space: nowrap;
+}
+
+/*
+ * 单行、不省略号；列宽仍由 Element Plus colgroup 统一控制，
+ * 保证表头 / 表体对齐，超宽由表格自身横向滚动。
+ */
+.el-table .cell {
+	white-space: nowrap;
+	word-break: keep-all;
+	overflow: hidden;
+	text-overflow: clip;
+}
+
+.el-table .el-tag,
+.el-table .el-button.is-link {
+	vertical-align: middle;
+}
+
+.el-table--border::before,
+.el-table--border::after,
+.el-table--border .el-table__inner-wrapper::before,
+.el-table--border .el-table__inner-wrapper::after,
+.el-table__border-left-patch {
+	display: none !important;
+}
+
+.el-table--border .el-table__cell {
+	border-right: none !important;
+}
+
+.el-table td.el-table__cell,
+.el-table th.el-table__cell.is-leaf {
+	border-bottom: 1px solid #f0f0f0;
+}
+
+.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+	background: #fafafa;
+}
+
+.el-table .el-table__empty-block {
+	min-height: 160px;
+}
+
+/* —— 分页 —— */
+.pagination,
+.el-pagination {
+	display: flex;
+	justify-content: flex-end;
+	align-items: center;
+	flex-wrap: wrap;
+	margin-top: 0;
+	padding-top: 16px;
+}
+
+.el-pagination {
+	--el-pagination-button-bg-color: #fff;
+	--el-pagination-hover-color: var(--pro-primary);
+}
+
+.el-pagination.is-background .el-pager li.is-active {
+	background-color: var(--pro-primary);
+}
+
+/* —— 按钮微调 —— */
+.el-button {
+	font-weight: 400;
+}
+
+.el-button--primary {
+	--el-button-bg-color: var(--pro-primary);
+	--el-button-border-color: var(--pro-primary);
+	--el-button-hover-bg-color: var(--pro-primary-hover);
+	--el-button-hover-border-color: var(--pro-primary-hover);
+	--el-button-active-bg-color: var(--pro-primary-active);
+	--el-button-active-border-color: var(--pro-primary-active);
+}
+
+.el-button.is-link {
+	padding: 0 4px;
+	height: auto;
+}
+
+/* —— Tag / Dialog / Form —— */
+.el-tag {
+	border-radius: 4px;
+}
+
+.el-dialog {
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.el-dialog__header {
+	padding: 16px 24px;
+	margin-right: 0;
+	border-bottom: 1px solid var(--pro-border);
+}
+
+.el-dialog__body {
+	padding: 24px;
+}
+
+.el-dialog__footer {
+	padding: 12px 24px;
+	border-top: 1px solid var(--pro-border);
+}
+
+.el-form-item__label {
+	color: rgba(0, 0, 0, 0.88);
+}
+
+.plugins-tips {
+	padding: 12px 16px;
+	margin: 24px 24px 0;
+	background: #e6f4ff;
+	border: 1px solid #91caff;
+	border-radius: 6px;
+	color: rgba(0, 0, 0, 0.88);
+	font-size: 14px;
+	line-height: 1.5715;
+}
+
+.pro-field-label {
+	color: rgba(0, 0, 0, 0.88);
+	font-size: 14px;
+	white-space: nowrap;
+}
+
+.pro-form-pad {
+	padding: 0 24px 24px;
+}
+
+.pro-form-pad.el-alert {
+	margin: 0 24px 16px;
+	width: auto;
+}
+
+.pro-search .el-form-item {
+	margin-bottom: 0;
+	margin-right: 0;
+}
+
+/* 仅有 toolbar、无筛选时，卡片顶栏与表格衔接 */
+.container > .pro-toolbar:first-child {
+	padding-top: 16px;
+}
+
+.container > .plugins-tips + .pro-toolbar {
+	padding-top: 16px;
+}
+
+.plugins-tips a {
+	color: var(--el-color-primary);
+}
+
+.el-button + .el-tooltip {
+	margin-left: 10px;
+}
+
+.mgb20 {
+	margin-bottom: 20px;
+}
+
+.mgb10 {
+	margin-bottom: 10px;
+}
+
+.mr10 {
+	margin-right: 10px;
+}
+
+.move-enter-active,
+.move-leave-active {
+	transition: opacity 0.1s ease;
+}
+
+.move-enter-from,
+.move-leave-to {
+	opacity: 0;
+}
+
+.el-time-panel__content::after,
+.el-time-panel__content::before {
+	margin-top: -7px;
+}
+
+.el-time-spinner__wrapper .el-scrollbar__wrap:not(.el-scrollbar__wrap--hidden-default) {
+	padding-bottom: 0;
+}
+
+[hidden] {
+	display: none !important;
+}
+
+.flex-center {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
+/* 页面内多卡片间距 */
+.container + .container {
+	margin-top: 16px;
+}

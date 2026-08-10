@@ -1,0 +1,123 @@
+/**
+ * Manna UI tokens — Figma Holy Bible
+ * Home/Quiz: photo chrome · Bible/Devotion/Me: warm peach light chrome
+ */
+$manna-white: #ffffff;
+$manna-ink: #ffffff;
+$manna-ink-soft: rgba(255, 255, 255, 0.88);
+$manna-ink-mute: rgba(255, 255, 255, 0.62);
+$manna-deep: #0a0a0a;
+$manna-deep-mid: #1a1a1a;
+$manna-btn-text: #212121;
+$manna-cream: #ffffff;
+$manna-peach: #fff4ee;
+$manna-peach-soft: #fff6f1;
+$manna-peach-mid: #ffddcb;
+$manna-stat-peach: #ffecd9;
+$manna-tag-on: #fad02c;
+$manna-gold: #c9a46a;
+$manna-gold-soft: #f0c27a;
+$manna-danger: #e8a090;
+$manna-glass: rgba(0, 0, 0, 0.3);
+$manna-glass-border: rgba(255, 255, 255, 0.2);
+$manna-glass-light: rgba(255, 255, 255, 0.6);
+$manna-glass-light-border: rgba(255, 255, 255, 0.7);
+$manna-amen-bg: rgba(255, 255, 255, 0.9);
+$manna-radius-btn: 500rpx;
+$manna-radius-panel: 32rpx;
+$manna-radius-tab: 100rpx;
+$manna-font-script: "Lavishly Yours", "LavishlyYours", cursive;
+$manna-font-serif: "Forum", "Times New Roman", Georgia, serif;
+$manna-font-display: $manna-font-script;
+$manna-font-body: "Lexend", "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+$manna-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1);
+$manna-shadow-card: 0 8rpx 28rpx rgba(28, 25, 21, 0.06);
+/* Tab 48px@375；底距 26 + 安全区后，内容需让出 ~96px ≈ 192rpx */
+$manna-tab-h: 96rpx;
+$manna-page-pad-bottom: 192rpx;
+
+@mixin manna-atmosphere {
+	background-color: $manna-deep;
+	color: $manna-ink;
+}
+
+@mixin manna-script {
+	font-family: $manna-font-script;
+	font-weight: 400;
+	letter-spacing: 0;
+}
+
+@mixin manna-serif {
+	font-family: $manna-font-serif;
+	font-weight: 400;
+}
+
+@mixin manna-display {
+	@include manna-script;
+}
+
+@mixin manna-body {
+	font-family: $manna-font-body;
+	color: $manna-ink-soft;
+}
+
+/** Me / 子页导航标题：统一 Lexend，避免 Lavishly/Forum 混用 */
+@mixin manna-nav-title {
+	font-family: $manna-font-body;
+	font-weight: 700;
+	font-size: 36rpx;
+	color: $manna-btn-text;
+	line-height: 1.2;
+}
+
+@mixin manna-cta-cream {
+	background: $manna-amen-bg;
+	color: $manna-btn-text;
+	border-radius: $manna-radius-btn;
+	font-family: $manna-font-body;
+	font-weight: 700;
+	box-shadow: $manna-shadow;
+	backdrop-filter: blur(8rpx);
+}
+
+@mixin manna-panel {
+	background: rgba(255, 255, 255, 0.12);
+	border: 1rpx solid rgba(255, 255, 255, 0.18);
+	border-radius: $manna-radius-panel;
+	backdrop-filter: blur(20rpx);
+}
+
+@mixin manna-tab-glass {
+	background: $manna-glass;
+	border: 1rpx solid $manna-glass-border;
+	border-radius: $manna-radius-tab;
+	backdrop-filter: blur(12rpx);
+}
+
+@mixin manna-tab-glass-light {
+	background: $manna-glass-light;
+	border: 1rpx solid $manna-glass-light-border;
+	border-radius: $manna-radius-tab;
+	backdrop-filter: blur(20rpx);
+	box-shadow: 0 0 24rpx rgba(0, 0, 0, 0.12);
+}
+
+@mixin manna-peach-page {
+	background: linear-gradient(180deg, $manna-peach-mid 0%, $manna-peach-soft 28%, $manna-peach 100%);
+	color: $manna-btn-text;
+	font-family: $manna-font-body;
+}
+
+@mixin manna-white-card {
+	background: $manna-white;
+	border-radius: 40rpx;
+	box-shadow: $manna-shadow-card;
+}
+
+/** 子页顶栏：圆形返回 + 居中标题 */
+@mixin manna-sub-nav {
+	display: flex;
+	align-items: center;
+	gap: 12rpx;
+	margin-bottom: 28rpx;
+}
