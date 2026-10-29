@@ -3,11 +3,14 @@
   "version": "1.0.0",
   "description": "Manna uni-app client (Daily Bible)",
   "main": "main.js",
+  "os": ["darwin", "win32", "linux"],
+  "cpu": ["x64", "arm64"],
+  "nvueCompiler": "uni-app",
   "scripts": {
     "dev:h5": "UNI_INPUT_DIR=$PWD uni -p h5 --port 5175",
     "build:h5": "UNI_INPUT_DIR=$PWD uni build -p h5",
     "export:bootstrap": "cd ../../backend && ./uivsbe_env/bin/python scripts/export_manna_bootstrap.py",
-    "postinstall": "node -e \"console.log('Manna mobile deps ready. npm run dev:h5 or HBuilderX.')\""
+    "postinstall": "node scripts/patch-lime-painter.js && node -e \"console.log('Manna mobile deps ready. npm run dev:h5 or HBuilderX.')\""
   },
   "keywords": [
     "manna",
@@ -35,7 +38,10 @@
     "@dcloudio/uni-cli-shared": "^3.0.0-alpha-5020320260803001",
     "@dcloudio/uni-stacktracey": "^3.0.0-alpha-5020320260803001",
     "@dcloudio/vite-plugin-uni": "^3.0.0-alpha-5020320260803001",
+    "@esbuild/darwin-arm64": "0.21.5",
+    "esbuild": "0.21.5",
     "sass": "^1.102.0",
     "vite": "^5.2.8"
   }
+  
 }

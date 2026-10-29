@@ -2,7 +2,8 @@
 node_modules/
 .pnp
 .pnp.js
-
+package-lock.json/
+package.json/
 # 构建产物
 dist/
 build/
@@ -71,3 +72,9 @@ builds/
 *.jks
 *.cer
 *.pem
+# signing — do not commit
+**/*.mobileprovision
+
+**/Library/Caches/**
+**/.cache/**
+

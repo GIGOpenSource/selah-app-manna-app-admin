@@ -341,7 +341,7 @@ onMounted(load)
 	z-index: 2;
 	display: flex;
 	flex-direction: column;
-	gap: 8rpx;
+	& > *:not(:first-child) { margin-top: 8rpx; }
 }
 .cta {
 	height: 96rpx;

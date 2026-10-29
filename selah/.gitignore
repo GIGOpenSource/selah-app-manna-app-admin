@@ -71,3 +71,5 @@ builds/
 *.jks
 *.cer
 *.pem
+# signing — do not commit
+**/*.mobileprovision

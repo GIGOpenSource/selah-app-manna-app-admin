@@ -1,6 +1,6 @@
 <!--
   协议详情页：隐私 / 条款 / 订阅 / 帮助。
-  交互与设置页一致：吸顶毛玻璃 + 圆形返回 + 衬线标题 + 灰底白卡正文。
+  交互与设置页一致：吸顶毛玻璃 + 圆形返回 + Lexend 导航与章节标题 + 灰底白卡正文。
 -->
 <template>
 	<view class="page">
@@ -9,7 +9,7 @@
 				<view class="nav-pill" @tap.stop="goBack">
 					<image class="nav-ico" src="/static/ui/ico-back.svg" mode="aspectFit" />
 				</view>
-				<text class="nav-title" :style="titleStyle">{{ pageTitle }}</text>
+				<text class="nav-title">{{ pageTitle }}</text>
 				<view class="nav-spacer" />
 			</view>
 		</view>
@@ -56,28 +56,20 @@
 /**
  * 协议详情：slug=privacy|terms|subscription|help；Help 附带公开热线列表。
  */
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
 import { getLegalDoc, listLegalSlugs } from '@/utils/legalDocs.js'
 import { apiHotlines } from '@/api/content.js'
 import { safeBack } from '@/utils/nav.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
-import { useCollapsingTitle } from '@/utils/collapsingTitle.js'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const statusBarPx = getStatusBarPx()
-const { titleStyle } = useCollapsingTitle({
-	mode: 'bar',
-	statusBarPx,
-	fontStartRpx: 40,
-	fontEndRpx: 34,
-	leftStartPercent: 16,
-})
-
 const slug = ref('privacy')
-const doc = ref(getLegalDoc('privacy'))
 const hotlines = ref([])
+
+const doc = computed(() => getLegalDoc(slug.value, locale.value))
 
 const pageTitle = computed(() => {
 	try {
@@ -114,12 +106,15 @@ async function loadHotlines() {
 }
 
 function applySlug(s) {
-	const next = getLegalDoc(s)
+	const next = getLegalDoc(s, locale.value)
 	slug.value = next.slug
-	doc.value = next
 	uni.pageScrollTo({ scrollTop: 0, duration: 0 })
 	loadHotlines()
 }
+
+watch(locale, () => {
+	loadHotlines()
+})
 
 function openSlug(s) {
 	// 同页切换 slug，禁止 redirectTo 整页重挂载
@@ -194,9 +189,9 @@ onLoad((q) => {
 	height: 48rpx;
 }
 .nav-title {
-	font-family: $manna-font-serif;
-	font-size: 36rpx;
-	color: $manna-btn-text;
+	@include manna-nav-title;
+	flex: 1;
+	text-align: center;
 }
 .nav-spacer {
 	width: 72rpx;
@@ -228,9 +223,9 @@ onLoad((q) => {
 }
 .sec-heading {
 	display: block;
-	font-family: $manna-font-serif;
-	font-size: 34rpx;
-	font-weight: 400;
+	font-family: $manna-font-body;
+	font-size: 32rpx;
+	font-weight: 700;
 	color: $manna-btn-text;
 	margin-bottom: 16rpx;
 	line-height: 1.3;

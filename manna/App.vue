@@ -1,22 +1,33 @@
 <script setup>
 /**
- * App 启动流（冷启主流程）：
- * 注销本机 → Welcome；否则 ensureLogin → Welcome 闸 / Home。
+ * App 启动：灌缓存 / 藏原生 TabBar / 提醒。
+ * 页面路由改由 pages/boot/boot 在挂载后执行：
+ * 未登录直接进 Welcome，避免先闪首页再跳。
  */
 import { onLaunch, onShow } from '@dcloudio/uni-app'
-import { ensureLogin, shouldForceLoginPage } from '@/utils/session.js'
-import { track, setUserProps } from '@/utils/analytics.js'
-import { routeAfterLogin } from '@/utils/coldStart.js'
 import { hydrateBootstrapCaches, refreshBootstrapCaches } from '@/utils/bootstrap.js'
 import { hideNativeTabBar } from '@/utils/tabbar.js'
 import { apiMannaActivityPing } from '@/api/manna.js'
-import { getCurrentLanguage, getToken, IS_NEW_USER_KEY, migrateLegacyStorageKeys } from '@/utils/storageKeys.js'
+import { getToken, migrateLegacyStorageKeys } from '@/utils/storageKeys.js'
+import { ensureMannaRemindersScheduled, bindMannaPushClick } from '@/utils/reminder.js'
+import { enableAudioMix } from '@/utils/mixBgmPlayer.js'
+import { listenSession } from '@/utils/listenSession.js'
+import '@/utils/h5Audio.js'
 
-onLaunch(async () => {
+onLaunch(() => {
 	migrateLegacyStorageKeys()
 	hydrateBootstrapCaches()
 	refreshBootstrapCaches().catch(() => {})
-	hideNativeTabBar()
+	// 杀进程再进：清听经小卡态；并强制藏原生 tabBar（冷启需延后补刀）
+	listenSession.mini = false
+	listenSession.keepAlive = false
+	listenSession.playing = false
+	hideNativeTabBar({ force: true })
+	enableAudioMix()
+	try {
+		bindMannaPushClick()
+		ensureMannaRemindersScheduled()
+	} catch (e) {}
 
 	// H5 QA：未设平台时默认 ios，便于命中带 platform 的库内 Scope 行
 	// #ifdef H5
@@ -27,39 +38,15 @@ onLaunch(async () => {
 		}
 	} catch (e) {}
 	// #endif
-
-	if (shouldForceLoginPage()) {
-		uni.reLaunch({ url: '/pagesA/welcome/welcome' })
-		return
-	}
-	try {
-		const user = await ensureLogin()
-		refreshBootstrapCaches().catch(() => {})
-		setUserProps({
-			user_id: user.user_id,
-			vip_level: user.vip_level,
-			register_country: user.register_country || '',
-			login_type: user.login_type,
-			system_lang: user.system_lang || getCurrentLanguage(),
-		})
-		track('login_success', {
-			method: user.login_type || 'device',
-			is_new_user: !!uni.getStorageSync(IS_NEW_USER_KEY),
-		})
-		await routeAfterLogin(user)
-	} catch (e) {
-		if (e && e.code === 'FORCE_LOGIN') {
-			uni.reLaunch({ url: '/pagesA/welcome/welcome' })
-			return
-		}
-		console.error('manna launch login failed', e)
-		uni.reLaunch({ url: '/pagesA/welcome/welcome' })
-	}
 })
 
 onShow(() => {
-	hideNativeTabBar()
-	// 冷启 onShow 常早于 ensureLogin 写 token；无 token 不 ping，避免 401 清会话打断登录
+	hideNativeTabBar({ force: true })
+	try {
+		bindMannaPushClick()
+		ensureMannaRemindersScheduled()
+	} catch (e) {}
+	// 冷启 onShow 常早于 boot 写 token；无 token 不 ping，避免 401 清会话打断登录
 	if (!getToken()) return
 	apiMannaActivityPing({ scene: 'app_show' }, { skipAuthRetry: true }).catch(() => {})
 })
@@ -134,10 +121,17 @@ onShow(() => {
 	font-display: swap;
 }
 
-page {
-	background: #0a0a0a !important;
-	color: #ffffff;
+page,
+html,
+body,
+uni-page-body,
+uni-page-wrapper,
+.uni-page-body {
+	background: #fff4ee !important;
+	color: #212121;
 	font-family: $manna-font-body;
+	min-height: 100%;
+	height: 100%;
 }
 
 /* uni-text / button / input 默认不继承 page 字体 */

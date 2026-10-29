@@ -44,7 +44,7 @@
       <!-- 语录收藏夹 -->
       <el-table v-if="kind === 'folder' && !folderId" :data="rows" v-loading="loading">
         <el-table-column prop="id" label="夹ID" width="80" />
-        <el-table-column label="App" width="90">
+        <el-table-column label="App" min-width="110" width="110">
           <template #default="{ row }">
             <el-tag size="small" :type="row.app_key === 'manna' ? 'warning' : 'primary'">
               {{ row.app_key || '—' }}
@@ -76,7 +76,7 @@
       <!-- 夹内语录 -->
       <el-table v-else-if="kind === 'folder' && folderId" :data="items" v-loading="loading">
         <el-table-column prop="id" label="条目ID" width="90" />
-        <el-table-column label="App" width="90">
+        <el-table-column label="App" min-width="110" width="110">
           <template #default="{ row }">{{ row.app_key || '—' }}</template>
         </el-table-column>
         <el-table-column prop="content_id" label="语录ID" width="90" />
@@ -98,7 +98,7 @@
       <!-- 语录喜欢 -->
       <el-table v-else-if="kind === 'like'" :data="rows" v-loading="loading">
         <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column label="App" width="90">
+        <el-table-column label="App" min-width="110" width="110">
           <template #default="{ row }">
             <el-tag size="small">{{ row.app_key || '—' }}</el-tag>
           </template>
@@ -127,7 +127,7 @@
       <!-- Manna 收藏 / 高亮 / 笔记 -->
       <el-table v-else :data="rows" v-loading="loading">
         <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column label="App" width="90">
+        <el-table-column label="App" min-width="110" width="110">
           <template #default="{ row }">
             <el-tag size="small" type="warning">{{ row.app_key || '—' }}</el-tag>
           </template>

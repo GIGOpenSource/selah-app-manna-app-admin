@@ -30,7 +30,7 @@ function getToken() {
 	return uni.getStorageSync('token') || '';
 }
 
-/** 请求头平台：APP 读系统；H5 可读 debug_x_platform=ios|android */
+/** 请求头平台：APP 读系统；H5 跟手机 UA 走 ios/android，也可 debug_x_platform 覆盖 */
 function requestPlatform() {
 	// #ifdef APP-PLUS
 	try {
@@ -44,6 +44,11 @@ function requestPlatform() {
 	try {
 		const debug = String(uni.getStorageSync('debug_x_platform') || '').toLowerCase()
 		if (debug === 'ios' || debug === 'android') return debug
+	} catch (e) {}
+	try {
+		const ua = String((typeof navigator !== 'undefined' && navigator.userAgent) || '').toLowerCase()
+		if (/iphone|ipad|ipod/.test(ua)) return 'ios'
+		if (/android/.test(ua)) return 'android'
 	} catch (e) {}
 	return ''
 	// #endif
@@ -182,9 +187,11 @@ function request(url, params, other) {
 				}
                  // response handled below
 				if (data.statusCode == 200 || data.statusCode == 201) {
-					// 业务码 403：仅曾带 token 时视为身份失效并踢 Welcome
+					// 业务码 403：默认视为身份失效；VIP/权益门禁传 skipSessionExpire 由页面 goVip
 					if (data.data.code == 403) {
-						if (hadToken && !expired) {
+						if (other.skipSessionExpire) {
+							reject(data.data);
+						} else if (hadToken && !expired) {
 							expired = true;
 							if (httpConfig.errorOutput) {
 								uni.showToast({
@@ -200,8 +207,10 @@ function request(url, params, other) {
 								uni.setStorageSync('force_login_page', '1');
 								uni.reLaunch({ url: '/pagesA/welcome/welcome' });
 							});
+							reject(data.data)
+						} else {
+							reject(data.data)
 						}
-						reject(data.data)
 					} else {
 						expired = false;
 						// 业务成功码 200/201
@@ -219,10 +228,13 @@ function request(url, params, other) {
 						}
 					}
 				} else {
-					// 非 2xx HTTP：通用失败 toast
+					// 非 2xx / 无网（安卓缺 INTERNET 时 statusCode 常为 undefined）
 					if (httpConfig.errorOutput) {
+						const offline = !data.statusCode
 						uni.showToast({
-							title: t('request_failed'),
+							title: offline
+								? (t('network_error') || t('request_failed'))
+								: t('request_failed'),
 							icon: 'none'
 						})
 					}

@@ -12,6 +12,7 @@
 				<image class="head__ico" src="/static/ui/me/ico-manna.svg" mode="aspectFit" />
 			</view>
 			<text class="head__lab">{{ t('manna_balance') }}</text>
+			<text class="earn">{{ t('ledger_earn_hint') }}</text>
 		</view>
 
 		<scroll-view
@@ -54,7 +55,12 @@ const REASON_KEYS = {
 	grant_newcomer: 'ledger_reason_newcomer',
 	quiz_pass: 'ledger_reason_quiz_pass',
 	quiz_fail: 'ledger_reason_quiz_fail',
+	quiz_in_bible: 'ledger_reason_quiz_in_bible',
+	quiz_review: 'ledger_reason_quiz_review',
 	story_unlock: 'ledger_reason_story_unlock',
+	prayer_amen: 'ledger_reason_prayer',
+	devotion_amen: 'ledger_reason_devotion',
+	bible_read: 'ledger_reason_bible_read',
 }
 
 function reasonLabel(reason) {
@@ -148,7 +154,6 @@ onMounted(async () => {
 .nav {
 	display: flex;
 	align-items: center;
-	gap: 8rpx;
 	margin-bottom: 28rpx;
 }
 
@@ -161,7 +166,6 @@ onMounted(async () => {
 
 .nav__title {
 	@include manna-nav-title;
-	font-size: 40rpx;
 }
 
 .head {
@@ -173,7 +177,6 @@ onMounted(async () => {
 .head__row {
 	display: flex;
 	align-items: center;
-	gap: 12rpx;
 }
 
 .head__n {
@@ -187,6 +190,7 @@ onMounted(async () => {
 .head__ico {
 	width: 32rpx;
 	height: 32rpx;
+	margin-left: 12rpx;
 }
 
 .head__lab {
@@ -198,6 +202,16 @@ onMounted(async () => {
 	text-transform: uppercase;
 }
 
+.earn {
+	display: block;
+	margin-top: 20rpx;
+	font-size: 24rpx;
+	line-height: 36rpx;
+	color: rgba(33, 33, 33, 0.55);
+}
+
+.press { opacity: 0.75; }
+
 .list {
 	width: 100%;
 }
@@ -207,7 +221,6 @@ onMounted(async () => {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 24rpx;
 	padding: 28rpx 32rpx;
 	margin-bottom: 16rpx;
 }

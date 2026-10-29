@@ -12,17 +12,17 @@
     </div>
     <el-table :data="rows" v-loading="loading">
       <el-table-column prop="line" label="文案" min-width="280" />
-      <el-table-column prop="sort_order" label="排序" width="70" />
-      <el-table-column prop="app_key" label="App名" width="90">
-        <template #default="{ row }">{{ row.app_key || '全部' }}</template>
+      <el-table-column prop="sort_order" label="排序" min-width="80" width="80" />
+      <el-table-column prop="app_key" label="App名" min-width="110" width="110">
+        <template #default="{ row }">{{ row.app_key || '空维' }}</template>
       </el-table-column>
-      <el-table-column prop="language" label="语言" width="90">
+      <el-table-column prop="language" label="语言" min-width="100" width="100">
         <template #default="{ row }">{{ row.language || '全部' }}</template>
       </el-table-column>
-      <el-table-column prop="platform" label="设备" width="90">
+      <el-table-column prop="platform" label="设备" min-width="100" width="100">
         <template #default="{ row }">{{ row.platform || '全部' }}</template>
       </el-table-column>
-      <el-table-column prop="enabled" label="启用" width="80">
+      <el-table-column prop="enabled" label="启用" min-width="90" width="90">
         <template #default="{ row }">
           <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '是' : '否' }}</el-tag>
         </template>
@@ -46,12 +46,6 @@
     <el-dialog v-model="visible" :title="form.id ? '编辑文案' : '新建文案'" width="600px" destroy-on-close>
       <el-form label-width="90px">
         <el-form-item label="文案"><el-input v-model="form.line" type="textarea" :rows="3" maxlength="255" show-word-limit /></el-form-item>
-        <el-form-item label="App">
-          <el-select v-model="form.app_key" filterable style="width: 100%">
-            <el-option label="全局（两 App 可见）" value="" />
-            <el-option v-for="a in APP_KEYS" :key="a" :label="a" :value="a" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="语言">
           <el-select v-model="form.language" style="width: 100%">
             <el-option label="全部" value="" />
@@ -81,8 +75,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { CirclePlusFilled } from '@element-plus/icons-vue'
 import { fetchMannaStatsCopies, saveMannaStatsCopy } from '../../api'
 import ScopeFilter from '../../components/ScopeFilter.vue'
-import { browseScopeParams } from '../../utils/scopeParams'
-import { APP_KEYS, LANG_OPTIONS } from '../../utils/enumZh'
+import { browseScopeParams, defaultCreateAppKey } from '../../utils/scopeParams'
+import { LANG_OPTIONS } from '../../utils/enumZh'
 
 const appKey = ref('manna')
 const language = ref('')
@@ -127,7 +121,7 @@ function open(row) {
         line: '',
         sort_order: 0,
         enabled: true,
-        app_key: appKey.value || 'manna',
+        app_key: defaultCreateAppKey(),
         language: language.value || '',
         platform: platform.value || '',
       }
@@ -140,7 +134,7 @@ async function save() {
     return
   }
   try {
-    await saveMannaStatsCopy(form.value)
+    await saveMannaStatsCopy({ ...form.value, app_key: defaultCreateAppKey() })
     ElMessage.success('已保存')
     visible.value = false
     load()

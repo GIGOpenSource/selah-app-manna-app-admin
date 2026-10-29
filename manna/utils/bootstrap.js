@@ -4,8 +4,8 @@
  * 本文件仅服务 `mobile-manna`（pageCache 前缀 manna_page_cache:）。
  * 勿与 Selah `frontend/mobile/utils/bootstrap.js` 混用或互相覆盖快照目录。
  *
- * 适合随包：app-config（含 login_title/subtitle）/ Welcome / Onboarding 题（预留）/
- *           教育夹层（VIP trial_intro 等）。
+ * 适合随包：app-config（含 login_title/subtitle）/ Welcome / Onboarding 题 /
+ *           教育夹层（VIP trial_intro 等）。冷启是否走问卷以线上题库为准。
  * 不随包：Bible / Quiz / Devotion / Prayer / Me 业务数据、余额账本、VIP 权益状态。
  *
  * 快照来源：`static/bootstrap/*.json`
@@ -16,7 +16,7 @@ import bundledWelcome from '@/static/bootstrap/welcome.json'
 import bundledOnboarding from '@/static/bootstrap/onboarding-questions.json'
 import bundledInterstitials from '@/static/bootstrap/interstitials.json'
 import { apiAppConfig, apiWelcome, apiInterstitial, apiOnboardingQuestions } from '@/api/content.js'
-import { readPageCache, writePageCache } from '@/utils/pageCache.js'
+import { readPageCache, writePageCache, clearPageCache } from '@/utils/pageCache.js'
 import { getToken } from '@/utils/storageKeys.js'
 import {
 	APP_CONFIG_KEY,
@@ -44,7 +44,11 @@ export function appConfigRevision(data) {
 }
 
 export function welcomeRevision(data) {
-	return data && data.version != null ? Number(data.version) : ''
+	if (!data) return ''
+	const v = data.version != null ? Number(data.version) : ''
+	const img = String(data.image_url || '').trim()
+	// version + 图 URL：运营只换图未抬 version 时也要刷新
+	return `${v}|${img}`
 }
 
 export function onboardingRevision(data) {
@@ -96,6 +100,21 @@ export function hydrateBootstrapCaches() {
 	return { seeded }
 }
 
+function hasWelcomeCopy(data) {
+	return !!(data && (data.title || data.subtitle || data.cta_text || data.image_url))
+}
+
+/** 接口 results 为空对象时视为未配置，避免写成脏缓存 */
+function normalizeWelcomeResults(data) {
+	if (!data || typeof data !== 'object') return null
+	if (!hasWelcomeCopy(data)) return null
+	return data
+}
+
+function hasInterstitialCopy(data) {
+	return !!(data && (data.title || data.subtitle || data.image_url))
+}
+
 function writeIfChanged(key, fresh, getRevision) {
 	if (fresh == null) return false
 	const cached = readPageCache(key)
@@ -112,7 +131,7 @@ function writeIfChanged(key, fresh, getRevision) {
 
 /**
  * 后台静默刷新公开配置（不挡冷启）。revision 一致则跳过写缓存。
- * 冷启主路径暂不走问卷；已登录时仍拉 onboarding 以便日后接线。
+ * Welcome / 问卷 / 夹层：接口明确无内容时清缓存，避免包内快照把未配置的流程又灌回来。
  * @returns {Promise<{ updated: string[] }>}
  */
 export async function refreshBootstrapCaches() {
@@ -127,25 +146,26 @@ export async function refreshBootstrapCaches() {
 
 	try {
 		const res = await apiWelcome()
-		const fresh = res?.results
-		if (fresh && (fresh.title || fresh.subtitle)
-			&& writeIfChanged(WELCOME_CACHE_KEY, fresh, welcomeRevision)) {
-			updated.push(WELCOME_CACHE_KEY)
+		const fresh = normalizeWelcomeResults(res?.results)
+		if (hasWelcomeCopy(fresh)) {
+			if (writeIfChanged(WELCOME_CACHE_KEY, fresh, welcomeRevision)) {
+				updated.push(WELCOME_CACHE_KEY)
+			}
+		} else {
+			clearPageCache(WELCOME_CACHE_KEY)
 		}
 	} catch (e) {}
 
 	try {
 		if (getToken()) {
 			const res = await apiOnboardingQuestions({}, { skipAuthRetry: true, showLoading: false })
-			const questions = res?.results
-			if (Array.isArray(questions) && questions.length) {
-				const fresh = {
-					revision: (res.meta && res.meta.revision) || '',
-					questions,
-				}
-				if (writeIfChanged(ONBOARDING_Q_KEY, fresh, onboardingRevision)) {
-					updated.push(ONBOARDING_Q_KEY)
-				}
+			const questions = Array.isArray(res?.results) ? res.results : []
+			const fresh = {
+				revision: (res.meta && res.meta.revision) || '',
+				questions,
+			}
+			if (writeIfChanged(ONBOARDING_Q_KEY, fresh, onboardingRevision)) {
+				updated.push(ONBOARDING_Q_KEY)
 			}
 		}
 	} catch (e) {
@@ -162,9 +182,12 @@ export async function refreshBootstrapCaches() {
 			const res = await apiInterstitial(kind)
 			const fresh = res?.results
 			const key = interstitialCacheKey(kind)
-			if (fresh && (fresh.title || fresh.subtitle || fresh.image_url)
-				&& writeIfChanged(key, fresh, interstitialRevision)) {
-				updated.push(key)
+			if (hasInterstitialCopy(fresh)) {
+				if (writeIfChanged(key, fresh, interstitialRevision)) {
+					updated.push(key)
+				}
+			} else {
+				clearPageCache(key)
 			}
 		} catch (e) {}
 	}))
@@ -173,49 +196,60 @@ export async function refreshBootstrapCaches() {
 }
 
 /**
- * 解析 Welcome：优先 pageCache（含包内灌入），必要时短等网络；同时触发静默刷新。
+ * 解析 Welcome：以后台为准。未配/已关则跳过；断网才回落缓存。
  */
 export async function resolveWelcomeScreen() {
-	const cached = readPageCache(WELCOME_CACHE_KEY)
-	apiWelcome().then((res) => {
-		const fresh = res?.results
-		if (fresh && (fresh.title || fresh.subtitle)) {
-			writeIfChanged(WELCOME_CACHE_KEY, fresh, welcomeRevision)
-		}
-	}).catch(() => {})
-	if (cached && (cached.title || cached.subtitle)) return cached
 	try {
 		const res = await apiWelcome()
-		const fresh = res?.results
-		if (fresh && (fresh.title || fresh.subtitle)) {
-			writePageCache(WELCOME_CACHE_KEY, fresh)
+		const fresh = normalizeWelcomeResults(res?.results)
+		if (hasWelcomeCopy(fresh)) {
+			writeIfChanged(WELCOME_CACHE_KEY, fresh, welcomeRevision)
 			return fresh
 		}
-	} catch (e) {}
-	return cached || null
+		clearPageCache(WELCOME_CACHE_KEY)
+		return null
+	} catch (e) {
+		const cached = readPageCache(WELCOME_CACHE_KEY)
+		return hasWelcomeCopy(cached) ? cached : null
+	}
 }
 
 /**
- * 解析教育夹层：缓存优先，后台静默比对 version。
- * Manna：冷启跳过 personalize；VIP 入口可走 trial_intro（见 utils/vip.js）。
+ * 解析教育夹层：以后台为准。未配则跳过；断网才回落缓存。
+ * VIP 入口可走 trial_intro（见 utils/vip.js）。
  */
 export async function resolveInterstitialScreen(kind) {
 	const key = interstitialCacheKey(kind)
-	const cached = readPageCache(key)
-	apiInterstitial(kind).then((res) => {
-		const fresh = res?.results
-		if (fresh && (fresh.title || fresh.subtitle || fresh.image_url)) {
-			writeIfChanged(key, fresh, interstitialRevision)
-		}
-	}).catch(() => {})
-	if (cached && (cached.title || cached.subtitle || cached.image_url)) return cached
 	try {
 		const res = await apiInterstitial(kind)
 		const fresh = res?.results
-		if (fresh && (fresh.title || fresh.subtitle || fresh.image_url)) {
-			writePageCache(key, fresh)
+		if (hasInterstitialCopy(fresh)) {
+			writeIfChanged(key, fresh, interstitialRevision)
 			return fresh
 		}
-	} catch (e) {}
-	return cached || null
+		clearPageCache(key)
+		return null
+	} catch (e) {
+		const cached = readPageCache(key)
+		return hasInterstitialCopy(cached) ? cached : null
+	}
+}
+
+/**
+ * 解析问卷题：以后台为准。无启用题则空数组（跳过问卷）；断网才回落缓存。
+ * @returns {Promise<object[]>}
+ */
+export async function resolveOnboardingQuestions() {
+	try {
+		if (!getToken()) return []
+		const res = await apiOnboardingQuestions({}, { skipAuthRetry: true, showLoading: false })
+		const questions = Array.isArray(res?.results) ? res.results : []
+		writePageCache(ONBOARDING_Q_KEY, {
+			revision: (res.meta && res.meta.revision) || '',
+			questions,
+		})
+		return questions
+	} catch (e) {
+		return unwrapOnboardingCache(readPageCache(ONBOARDING_Q_KEY)).questions
+	}
 }

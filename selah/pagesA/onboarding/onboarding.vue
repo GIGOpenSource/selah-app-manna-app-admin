@@ -72,7 +72,7 @@
 /**
  * Onboarding 问卷：多题选择、basic_info 本地表单、完成/跳过；2.0 answers 对象提交。
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
 	apiOnboardingQuestions,
@@ -81,7 +81,7 @@ import {
 	apiAppConfig,
 } from '@/api/content.js'
 import { setUser } from '@/utils/session.js'
-import { track } from '@/utils/analytics.js'
+import { logFirebaseEvent } from '@/utils/firebase.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
 import { loadWithCache } from '@/utils/pageCache.js'
 import { ONBOARDING_Q_KEY, APP_CONFIG_KEY } from '@/utils/wallpaperCache.js'
@@ -91,6 +91,7 @@ import {
 	unwrapOnboardingCache,
 } from '@/utils/bootstrap.js'
 import { runBusy } from '@/utils/tapLock.js'
+import { localizeOnboardingQuestion } from '@/utils/onboardingI18n.js'
 
 /** Selah 2.0 扩展题 key（与后端 ONBOARDING_KEYS_2_0 对齐） */
 const KEYS_2_0 = [
@@ -142,8 +143,19 @@ const AGE_I18N = {
 const FALLBACK_GENDERS = []
 const FALLBACK_AGES = []
 
-const current = computed(() => questions.value[idx.value] || { title: '', options: [], question_key: '' })
+const current = computed(() => {
+	const raw = questions.value[idx.value] || { title: '', options: [], question_key: '' }
+	return localizeOnboardingQuestion(raw, t)
+})
 const stepKey = computed(() => current.value.question_key)
+const STEP_SHOW = {
+	faith_type: 'onboarding_chooseFaith_show',
+}
+watch(stepKey, (key) => {
+	const name = STEP_SHOW[key]
+	if (!name) return
+	try { logFirebaseEvent(name) } catch (e) {}
+})
 const isBasicStep = computed(() => stepKey.value === 'basic_info')
 const isLast = computed(() => idx.value >= questions.value.length - 1)
 
@@ -200,18 +212,9 @@ function select(v) {
 		else arr.push(v)
 		answers.value[key] = arr
 		form.value[key] = arr
-		track('onboarding_step_answer', { question_key: key })
-		if (key === 'interest_tags') {
-			track('onboarding_interest_select', { interest_tags: arr.join(',') })
-		}
 	} else {
 		answers.value[key] = v
 		form.value[key] = v
-		track('onboarding_step_answer', { question_key: key })
-		if (key === 'faith_type') track('onboarding_faith_select', { faith_type: v })
-		if (key === 'prayer_frequency') {
-			track('onboarding_prayer_frequency_select', { prayer_frequency: v })
-		}
 	}
 }
 
@@ -224,6 +227,18 @@ function canAdvance() {
 	}
 	const val = answers.value[key] ?? form.value[key]
 	return !!val
+}
+
+function aboutYouParams() {
+	const tags = form.value.interest_tags || answers.value.interest_tags || []
+	return {
+		name: form.value.display_name || '',
+		gender: form.value.gender || '',
+		age: form.value.age_range || '',
+		faith: form.value.faith_type || answers.value.faith_type || '',
+		frequency: form.value.prayer_frequency || answers.value.prayer_frequency || '',
+		topics: Array.isArray(tags) ? tags.join(',') : String(tags || ''),
+	}
 }
 
 function buildPayload() {
@@ -254,42 +269,26 @@ async function next() {
 	}
 	await runBusy(async () => {
 		if (isLast.value) {
-			track('onboarding_basic_info', {
-				gender: form.value.gender || '',
-				age_group: form.value.age_range || '',
-			})
+			try { logFirebaseEvent('onboarding_aboutYou_start', aboutYouParams()) } catch (e) {}
 			const payload = buildPayload()
 			const res = await apiOnboardingComplete(payload)
 			setUser(res.results)
-			track('onboarding_complete', {
-				faith_type: payload.faith_type,
-				prayer_frequency: payload.prayer_frequency,
-				interest_tags: (payload.interest_tags || []).join(','),
-			})
 			uni.reLaunch({ url: '/pages/home/home' })
 			return
 		}
 		idx.value += 1
 		const n = questions.value[idx.value] || {}
 		ensureAnswerSlot(n.question_key, (n.options || []).some((o) => o.type === 'multi') || LEGACY_MULTI.has(n.question_key))
-		track('onboarding_step_view', {
-			question_key: n.question_key || String(idx.value),
-			step_id: n.question_key || String(idx.value),
-			step_name: n.title || '',
-		})
 	}, { busy, cooldownMs: 300 })
 }
 
 async function skip() {
 	if (busy.value) return
+	try { logFirebaseEvent('onboarding_skip_click', aboutYouParams()) } catch (e) {}
 	await runBusy(async () => {
 		const cur = questions.value[idx.value] || {}
 		const res = await apiOnboardingSkip()
 		setUser(res.results)
-		track('onboarding_skip', {
-			step_id: cur.question_key || String(idx.value),
-			step_name: cur.title || '',
-		})
 		uni.reLaunch({ url: '/pages/home/home' })
 	}, { busy, cooldownMs: 800 })
 }
@@ -328,16 +327,20 @@ onMounted(async () => {
 	await loadWithCache(
 		ONBOARDING_Q_KEY,
 		async () => {
-			const res = await apiOnboardingQuestions()
-			const questions = res.results || []
+			const res = await apiOnboardingQuestions().catch(() => null)
+			const list = res?.results || []
+			// 空列表不要写缓存：否则会把 bootstrap / 上一轮好数据冲成白屏
+			if (!list.length) return null
 			return {
 				revision: (res.meta && res.meta.revision) || '',
-				questions,
+				questions: list,
 			}
 		},
 		(data) => {
 			const wrapped = unwrapOnboardingCache(data)
-			questions.value = sortAndFilter(wrapped.questions || [], featuresEnabled)
+			const list = sortAndFilter(wrapped.questions || [], featuresEnabled)
+			if (!list.length) return
+			questions.value = list
 		},
 		{ getRevision: onboardingRevision },
 	)
@@ -346,11 +349,6 @@ onMounted(async () => {
 		n.question_key,
 		(n.options || []).some((o) => o.type === 'multi') || LEGACY_MULTI.has(n.question_key),
 	)
-	track('onboarding_step_view', {
-		question_key: n.question_key || '0',
-		step_id: n.question_key || '0',
-		step_name: n.title || '',
-	})
 })
 </script>
 

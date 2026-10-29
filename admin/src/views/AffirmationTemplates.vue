@@ -17,27 +17,38 @@
         <el-button type="primary" :icon="CirclePlusFilled" @click="open()">新建</el-button>
       </div>
     </div>
-    <el-table :data="rows" v-loading="loading">
-      <el-table-column prop="id" label="ID" width="70" />
-      <el-table-column prop="content" label="正文" min-width="280" />
-      <el-table-column prop="app_key" label="App" width="90">
-        <template #default="{ row }">{{ row.app_key || '全部' }}</template>
+    <el-table :data="rows" v-loading="loading" class="tpl-table" style="width: 100%">
+      <el-table-column prop="id" label="ID" width="100" />
+      <el-table-column label="正文" min-width="240" class-name="col-content">
+        <template #default="{ row }">
+          <el-tooltip
+            :content="row.content || '—'"
+            placement="top"
+            :disabled="!row.content"
+            :show-after="300"
+          >
+            <span class="content-ellipsis">{{ row.content || '—' }}</span>
+          </el-tooltip>
+        </template>
       </el-table-column>
-      <el-table-column prop="language" label="语言" width="80">
+      <el-table-column prop="app_key" label="App" min-width="110" width="110">
+        <template #default="{ row }">{{ row.app_key || '空维' }}</template>
+      </el-table-column>
+      <el-table-column prop="language" label="语言" min-width="100" width="100">
         <template #default="{ row }">{{ row.language || '全部' }}</template>
       </el-table-column>
-      <el-table-column prop="platform" label="设备" width="90">
+      <el-table-column v-if="showPlat" prop="platform" label="设备" min-width="100" width="100">
         <template #default="{ row }">{{ row.platform || '全部' }}</template>
       </el-table-column>
-      <el-table-column prop="sort_weight" label="权重" width="80" />
-      <el-table-column prop="status" label="启用" width="80">
+      <el-table-column prop="sort_weight" label="权重" width="90" />
+      <el-table-column prop="status" label="启用" min-width="90" width="90">
         <template #default="{ row }">
           <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">
             {{ row.status === 1 ? '是' : '否' }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="160">
+      <el-table-column label="操作" width="168" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="open(row)">编辑</el-button>
           <el-button link type="danger" @click="onDelete(row.id)">删除</el-button>
@@ -58,23 +69,10 @@
         <el-form-item label="正文">
           <el-input v-model="form.content" type="textarea" rows="3" maxlength="160" show-word-limit />
         </el-form-item>
-        <el-form-item label="App">
-          <el-select v-model="form.app_key" filterable style="width: 100%">
-            <el-option label="全局（两 App 可见）" value="" />
-            <el-option v-for="a in APP_KEYS" :key="a" :label="a" :value="a" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="语言">
           <el-select v-model="form.language" style="width: 100%">
             <el-option label="全部" value="" />
             <el-option v-for="l in LANG_OPTIONS" :key="l.value" :label="l.label" :value="l.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="设备">
-          <el-select v-model="form.platform" style="width: 100%">
-            <el-option label="全部" value="" />
-            <el-option label="iOS" value="ios" />
-            <el-option label="Android" value="android" />
           </el-select>
         </el-form-item>
         <el-form-item label="权重"><el-input-number v-model="form.sort_weight" :min="0" /></el-form-item>
@@ -100,7 +98,8 @@ import {
 } from '../api'
 import ScopeFilter from '../components/ScopeFilter.vue'
 import { browseScopeParams, defaultCreateAppKey } from '../utils/scopeParams'
-import { APP_KEYS, LANG_OPTIONS } from '../utils/enumZh'
+import { LANG_OPTIONS } from '../utils/enumZh'
+import { shouldHidePlatform } from '../utils/productContext'
 
 const appKey = ref('')
 const language = ref('')
@@ -111,6 +110,7 @@ const total = ref(0)
 const loading = ref(false)
 const visible = ref(false)
 const form = ref({})
+const showPlat = !shouldHidePlatform()
 
 function onScopeChange() {
   load(1)
@@ -154,7 +154,11 @@ function open(row) {
 
 async function save() {
   try {
-    await saveAffirmationTemplate(form.value)
+    await saveAffirmationTemplate({
+      ...form.value,
+      app_key: defaultCreateAppKey(appKey.value),
+      platform: '',
+    })
     ElMessage.success('已保存')
     visible.value = false
     load()
@@ -175,3 +179,20 @@ async function onDelete(id) {
 
 onMounted(load)
 </script>
+
+<style scoped>
+.tpl-table :deep(.cell) {
+  text-overflow: clip;
+}
+.tpl-table :deep(.col-content .cell) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.content-ellipsis {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+</style>

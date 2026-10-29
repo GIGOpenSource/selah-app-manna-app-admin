@@ -23,6 +23,9 @@ $manna-glass-border: rgba(255, 255, 255, 0.2);
 $manna-glass-light: rgba(255, 255, 255, 0.6);
 $manna-glass-light-border: rgba(255, 255, 255, 0.7);
 $manna-amen-bg: rgba(255, 255, 255, 0.9);
+$manna-amen-solid: #b3715d;
+/** 晨祷 Amen 按钮：深草绿（夜祷用 $manna-amen-solid 陶土色） */
+$manna-amen-morning: #195c1e;
 $manna-radius-btn: 500rpx;
 $manna-radius-panel: 32rpx;
 $manna-radius-tab: 100rpx;
@@ -61,13 +64,22 @@ $manna-page-pad-bottom: 192rpx;
 	color: $manna-ink-soft;
 }
 
-/** Me / 子页导航标题：统一 Lexend，避免 Lavishly/Forum 混用 */
+/** 子页导航标题：Lexend 700，禁止 Forum / Lavishly */
 @mixin manna-nav-title {
+	font-family: $manna-font-body;
+	font-weight: 700;
+	font-size: 40rpx;
+	color: $manna-btn-text;
+	line-height: 1.2;
+}
+
+/** 弹窗 / 半屏 / Toast 标题：与导航同一套字，不用衬线 */
+@mixin manna-overlay-title {
 	font-family: $manna-font-body;
 	font-weight: 700;
 	font-size: 36rpx;
 	color: $manna-btn-text;
-	line-height: 1.2;
+	line-height: 1.25;
 }
 
 @mixin manna-cta-cream {
@@ -102,6 +114,18 @@ $manna-page-pad-bottom: 192rpx;
 	box-shadow: 0 0 24rpx rgba(0, 0, 0, 0.12);
 }
 
+/** 听经小窗：与浅色 Tab 同宽同材质 */
+@mixin manna-listen-mini {
+	width: 670rpx;
+	max-width: 100%;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	padding: 12rpx 16rpx 12rpx 12rpx;
+	@include manna-tab-glass-light;
+	pointer-events: auto;
+}
+
 @mixin manna-peach-page {
 	background: linear-gradient(180deg, $manna-peach-mid 0%, $manna-peach-soft 28%, $manna-peach 100%);
 	color: $manna-btn-text;
@@ -118,6 +142,22 @@ $manna-page-pad-bottom: 192rpx;
 @mixin manna-sub-nav {
 	display: flex;
 	align-items: center;
-	gap: 12rpx;
+	& > *:not(:first-child) { margin-left: 12rpx; }
 	margin-bottom: 28rpx;
+}
+
+/**
+ * App WebView 不认 inset，且 overflow:hidden 祖先会把无偏移的 fixed 裁掉。
+ * 必须写 top/left/right/bottom + 宽高，不能只用 inset:0。
+ */
+@mixin manna-overlay-mask($z: 9999) {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	width: 100%;
+	height: 100%;
+	z-index: $z;
+	box-sizing: border-box;
 }

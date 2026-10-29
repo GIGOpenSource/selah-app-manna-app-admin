@@ -34,7 +34,24 @@ export function apiOnboardingComplete(params) {
 	return postRequest('/content/onboarding/complete/', params)
 }
 
+export function apiOnboardingSkip() {
+	return postRequest('/content/onboarding/skip/', {})
+}
+
 /** Help 热线（Legal Help）；后端 /content/hotlines/ */
 export function apiHotlines(params = {}) {
-	return getRequest('/content/hotlines/', params || {}, { showLoading: false })
+	const language = params.language || getCurrentLanguage()
+	return getRequest('/content/hotlines/', { ...params, language }, { showLoading: false })
+}
+
+/** 不感兴趣（负反馈）；disliked=false 解除屏蔽 */
+export function apiDislike(contentId, disliked = true) {
+	return postRequest('/content/dislike/', { content_id: contentId, disliked })
+}
+
+/** 我的资产（点赞 / 收藏 / 屏蔽等） */
+export function apiMyAssets(kind, folderId, params) {
+	const query = { kind, ...(params || {}) }
+	if (folderId) query.folder_id = folderId
+	return getRequest('/content/my-assets/', query)
 }

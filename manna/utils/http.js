@@ -11,6 +11,7 @@
 import {
 	host,
 	APP_KEY,
+	develop,
 } from '@/config/config.js'
 import { t } from '@/i18n/index.js'
 import {
@@ -56,7 +57,7 @@ function requestPlatform() {
 let httpConfig = {
 	header: {
 		'Content-Type': "application/json",
-		'is-dev': 'true'
+		'is-dev': develop ? 'true' : 'false'
 	},
 	method: 'POST',
 	// 默认关闭：Feed/点赞/曝光等高频接口不应挡全屏；慢操作在调用处开启
@@ -66,7 +67,7 @@ let httpConfig = {
 	timer: null, // 定时器
 	loadingMask: false, // 展示loading的时候，是否给一个透明的蒙层，防止触摸穿透
 	stopRepeat: false, // 是否阻止重复请求
-	timeout: 1500000, // 请求超时时间
+	timeout: 30000, // 请求超时时间
 	errorOutput: true // 请求失败输出信息
 }
 
@@ -98,6 +99,7 @@ function request(url, params, other) {
 	other.header['token'] = token;
 	other.header['Accept-Language'] = getCurrentLanguage()
 	other.header['X-App-Key'] = APP_KEY
+	other.header['is-dev'] = develop ? 'true' : 'false'
 	const plat = requestPlatform()
 	if (plat) other.header['X-Platform'] = plat
 	return new Promise((resolve, reject) => {
@@ -114,7 +116,9 @@ function request(url, params, other) {
 			if (loadingReqCount === 1 && !httpConfig.timer) {
 				httpConfig.timer = setTimeout(() => {
 					uni.showLoading({
-						title: other.loadingText,
+						title: other.loadingText && other.loadingText !== 'Loading…'
+							? other.loadingText
+							: t('loading'),
 						mask: other.loadingMask
 					});
 					loadingShown = true;
@@ -187,6 +191,11 @@ function request(url, params, other) {
 				if (data.statusCode == 200 || data.statusCode == 201) {
 					// 业务码 403：鉴权类清会话；业务锁定（locked / vip）不当成过期
 					if (data.data.code == 403) {
+						const silentCodes = other.silentBizCodes || [];
+						if (silentCodes.includes(403)) {
+							reject(data.data)
+							return
+						}
 						const bizMsg = String(data.data.msg || data.data.message || '').toLowerCase()
 						const soft403 = (
 							bizMsg.includes('locked')

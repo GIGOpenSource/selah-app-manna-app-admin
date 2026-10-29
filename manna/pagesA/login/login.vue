@@ -2,6 +2,7 @@
   Login：对齐 Selah — Apple / Google / 快速登录 → routeAfterAuth → Home。
 -->
 <template>
+	<view class="page-wrap">
 	<view class="page">
 		<view class="bg" aria-hidden="true">
 			<image class="bg-photo" src="/static/ui/home/bg-279-364.png" mode="aspectFill" />
@@ -20,15 +21,25 @@
 		</view>
 
 		<view class="footer">
-			<view class="cta primary" :class="{ disabled: busy }" @tap="loginOauth('apple')">
+			<view
+				v-if="allowOauth && oauthProvider === 'apple'"
+				class="cta primary"
+				:class="{ disabled: busy }"
+				@tap="loginOauth('apple')"
+			>
 				<image class="cta-ico" src="/static/ui/login-ico-apple.svg" mode="aspectFit" />
 				<text class="cta-text light">{{ t('login_apple') }}</text>
 			</view>
-			<view class="cta outline" :class="{ disabled: busy }" @tap="loginOauth('google')">
+			<view
+				v-else-if="allowOauth"
+				class="cta outline"
+				:class="{ disabled: busy }"
+				@tap="loginOauth('google')"
+			>
 				<image class="cta-ico" src="/static/ui/login-ico-google.svg" mode="aspectFit" />
 				<text class="cta-text">{{ t('login_google') }}</text>
 			</view>
-			<view class="cta outline" :class="{ disabled: busy }" @tap="quickLogin">
+			<view v-if="allowDevice" class="cta outline" :class="{ disabled: busy }" @tap="quickLogin">
 				<text class="cta-text">{{ t('login_quick') }}</text>
 			</view>
 			<view class="legal">
@@ -38,6 +49,7 @@
 				<text class="legal-link" @click.stop="openLegalPage('privacy')">{{ t('legal_privacy') }}</text>
 			</view>
 		</view>
+	</view>
 
 		<manna-dialog
 			v-model:visible="bindDialogOpen"
@@ -48,28 +60,52 @@
 			@confirm="onBindDialogConfirm"
 			@cancel="onBindDialogCancel"
 		/>
+		<manna-dialog
+			v-model:visible="deletionOpen"
+			:title="t('deletion_pending_title')"
+			:content="deletionBody"
+			:confirm-text="t('deletion_keep')"
+			:cancel-text="t('deletion_continue')"
+			:close-on-mask="false"
+			@confirm="onDeletionKeep"
+			@cancel="onDeletionContinue"
+		/>
 	</view>
 </template>
 
 <script setup>
 /**
  * Login：流程对齐 Selah；标题/副标题走 AppConfig（app_key×语言×设备），i18n 作回落。
+ * 登录后 routeAfterAuth：后台有问卷则进问卷，否则 Home。
  */
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiOauthLogin } from '@/api/auth.js'
 import { apiAppConfig } from '@/api/content.js'
-import { ensureLogin, setUser, shouldForceLoginPage, clearForceLoginPage } from '@/utils/session.js'
+import { ensureLogin, setUser, shouldForceLoginPage, clearForceLoginPage, getUser } from '@/utils/session.js'
 import { track, setUserProps } from '@/utils/analytics.js'
 import { safeBack } from '@/utils/nav.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
-import { getSandboxOauthId, buildDeviceAuthPayload } from '@/utils/oauth.js'
+import {
+	buildOauthLoginPayload,
+	getLoginOauthProvider,
+	identityFromAppleSuccess,
+	identityFromGoogleSuccess,
+	isOauthUserCancel,
+	startUniLogin,
+} from '@/utils/oauth.js'
 import { routeAfterAuth } from '@/utils/coldStart.js'
+import {
+	isDeletionPending,
+	deletionPromptContent,
+	cancelAccountDeletion,
+} from '@/utils/accountDeletion.js'
 import { openLegalPage } from '@/utils/openLegal.js'
 import { loadWithCache } from '@/utils/pageCache.js'
 import { APP_CONFIG_KEY } from '@/utils/wallpaperCache.js'
-import { IS_NEW_USER_KEY, getCurrentLanguage, setToken } from '@/utils/storageKeys.js'
+import { IS_NEW_USER_KEY, FORCE_LOGIN_KEY, getCurrentLanguage, setToken } from '@/utils/storageKeys.js'
 import { appConfigRevision } from '@/utils/bootstrap.js'
+import { syncLocaleFromUser } from '@/i18n/index.js'
 
 const { t } = useI18n()
 const statusBarPx = getStatusBarPx()
@@ -80,8 +116,15 @@ const bindDialogTitle = ref('')
 const bindDialogContent = ref('')
 const bindDialogMode = ref('prompt')
 const bindProvider = ref('google')
+const pendingOauth = ref(null)
 const pageTitle = ref(t('login_title'))
 const pageSub = ref(t('login_sub'))
+const allowOauth = ref(true)
+const allowDevice = ref(true)
+const oauthProvider = getLoginOauthProvider()
+const deletionOpen = ref(false)
+const deletionBody = ref('')
+const pendingAfterAuth = ref(null)
 
 function applyLoginCopy(cfg) {
 	if (!cfg || typeof cfg !== 'object') return
@@ -89,6 +132,8 @@ function applyLoginCopy(cfg) {
 	const sub = String(cfg.login_subtitle || '').trim()
 	if (title) pageTitle.value = title
 	if (sub) pageSub.value = sub
+	if (cfg.oauth_login_enabled === false) allowOauth.value = false
+	if (cfg.device_login_enabled === false) allowDevice.value = false
 }
 
 function goBack() {
@@ -96,26 +141,72 @@ function goBack() {
 	safeBack('/pagesA/settings/settings')
 }
 
-async function finishLogin(method, user, isNew) {
+async function enterApp(method, user, isNew, toastTitle) {
 	clearForceLoginPage()
 	forceGate.value = false
-	setUser(user)
+	const u = user && typeof user === 'object' ? user : {}
+	setUser(u)
 	setUserProps({
-		user_id: user.user_id,
-		vip_level: user.vip_level,
-		register_country: user.register_country || '',
-		login_type: user.login_type || method,
-		system_lang: user.system_lang || getCurrentLanguage(),
+		user_id: u.user_id,
+		vip_level: u.vip_level,
+		register_country: u.register_country || '',
+		login_type: u.login_type || method,
+		system_lang: u.system_lang || getCurrentLanguage(),
+	})
+	// 全局语言以服务端 user.system_lang 为准，进主流程前先对齐
+	syncLocaleFromUser(u)
+	const dest = await routeAfterAuth(u, { isNew: !!isNew })
+	// 先完成跳转再 toast。登录页里先 toast 再 reLaunch，安卓会丢掉进问卷的导航
+	const title = String(toastTitle || '').trim()
+	if (title && dest !== 'onboarding') {
+		uni.showToast({
+			title,
+			icon: 'none',
+		})
+	}
+}
+
+async function finishLogin(method, user, isNew, toastTitle) {
+	const u = user && typeof user === 'object' ? user : {}
+	setUser(u)
+	setUserProps({
+		user_id: u.user_id,
+		vip_level: u.vip_level,
+		register_country: u.register_country || '',
+		login_type: u.login_type || method,
+		system_lang: u.system_lang || getCurrentLanguage(),
 	})
 	track('login_success', {
 		method,
 		is_new_user: !!isNew,
 	})
-	uni.showToast({
-		title: method === 'device' ? t('login_quick_ok') : t('bound'),
-		icon: 'none',
-	})
-	await routeAfterAuth(user, { isNew: !!isNew })
+	if (isDeletionPending(u)) {
+		pendingAfterAuth.value = { method, user: u, isNew, toastTitle }
+		deletionBody.value = deletionPromptContent(u)
+		busy.value = false
+		deletionOpen.value = true
+		return
+	}
+	await enterApp(method, u, isNew, toastTitle || (method === 'device' ? t('login_quick_ok') : ''))
+}
+
+async function onDeletionKeep() {
+	try {
+		const next = await cancelAccountDeletion()
+		const pending = pendingAfterAuth.value || {}
+		pendingAfterAuth.value = null
+		const user = next || pending.user || getUser()
+		uni.showToast({ title: t('deletion_keep_ok'), icon: 'none' })
+		await enterApp(pending.method || 'device', user, pending.isNew, '')
+	} catch (e) {
+		uni.showToast({ title: e?.message || t('request_failed'), icon: 'none' })
+	}
+}
+
+function onDeletionContinue() {
+	pendingAfterAuth.value = null
+	try { uni.setStorageSync(FORCE_LOGIN_KEY, '1') } catch (e) {}
+	forceGate.value = true
 }
 
 async function quickLogin() {
@@ -132,15 +223,58 @@ async function quickLogin() {
 	}
 }
 
-function loginOauth(provider) {
+async function loginOauth(provider) {
 	if (busy.value) return
-	bindProvider.value = provider
-	track('bind_prompt_click', { target: provider, scene: 'login_page' })
-	track('login_page_continue', { method: provider })
-	bindDialogMode.value = 'prompt'
-	bindDialogTitle.value = provider === 'apple' ? t('login_apple') : t('login_google')
-	bindDialogContent.value = t('bind_sandbox')
-	bindDialogOpen.value = true
+	startUniLogin(provider, {
+		success: async (success) => {
+			bindProvider.value = provider
+			track('bind_prompt_click', { target: provider, scene: 'login_page' })
+			track('login_page_continue', { method: provider })
+			busy.value = true
+			try {
+				const identity =
+					provider === 'apple'
+						? identityFromAppleSuccess(success)
+						: await identityFromGoogleSuccess(success)
+				if (provider === 'apple' && !identity.id_token) {
+					const err = new Error('missing_id_token')
+					err.errMsg = 'missing_id_token'
+					throw err
+				}
+				pendingOauth.value = identity
+				const res = await apiOauthLogin(
+					buildOauthLoginPayload(provider, identity),
+					{ silentBizCodes: [409] },
+				)
+				if (res.results?.token) setToken(res.results.token)
+				uni.setStorageSync(IS_NEW_USER_KEY, !!res.results?.is_new_user)
+				track('bind_success', { method: provider })
+				await finishLogin(provider, res.results?.user, !!res.results?.is_new_user, res.message || res.msg || '')
+			} catch (e) {
+				if (e && e.code === 409) {
+					track('bind_conflict_show', { method: provider })
+					bindDialogMode.value = 'conflict'
+					bindDialogTitle.value = t('account_exists')
+					bindDialogContent.value = e.message || t('bind_conflict_hint')
+					bindDialogOpen.value = true
+					return
+				}
+				toastNativeOauthFail(e)
+			} finally {
+				busy.value = false
+			}
+		},
+		fail: (err) => toastNativeOauthFail(err),
+	})
+}
+
+function toastNativeOauthFail(e) {
+	if (isOauthUserCancel(e)) return
+	if (e && (typeof e.code === 'number' || e.statusCode)) return
+	uni.showToast({
+		title: String(e?.errMsg || e?.message || t('request_failed')),
+		icon: 'none',
+	})
 }
 
 function onBindDialogCancel() {
@@ -151,42 +285,25 @@ function onBindDialogCancel() {
 
 async function runOauthLogin(confirmSwitch) {
 	const provider = bindProvider.value
-	const payload = {
-		...buildDeviceAuthPayload(),
-		provider,
-		oauth_id: getSandboxOauthId(provider),
-		confirm_switch: !!confirmSwitch,
-	}
-	return apiOauthLogin(payload, { silentBizCodes: [409] })
+	const ident = pendingOauth.value || {}
+	return apiOauthLogin(
+		buildOauthLoginPayload(provider, ident, { confirm_switch: !!confirmSwitch }),
+		{ silentBizCodes: [409] },
+	)
 }
 
 async function onBindDialogConfirm() {
 	if (busy.value) return
+	if (bindDialogMode.value !== 'conflict') return
 	busy.value = true
 	const provider = bindProvider.value
 	try {
-		if (bindDialogMode.value === 'conflict') {
-			track('bind_conflict_confirm', { method: provider })
-			const res2 = await runOauthLogin(true)
-			if (res2.results?.token) setToken(res2.results.token)
-			uni.setStorageSync(IS_NEW_USER_KEY, !!res2.results?.is_new_user)
-			await finishLogin(provider, res2.results.user, !!res2.results?.is_new_user)
-			return
-		}
-		const res = await runOauthLogin(false)
-		if (res.results?.token) setToken(res.results.token)
-		uni.setStorageSync(IS_NEW_USER_KEY, !!res.results?.is_new_user)
-		track('bind_success', { method: provider })
-		await finishLogin(provider, res.results.user, !!res.results?.is_new_user)
+		track('bind_conflict_confirm', { method: provider })
+		const res2 = await runOauthLogin(true)
+		if (res2.results?.token) setToken(res2.results.token)
+		uni.setStorageSync(IS_NEW_USER_KEY, !!res2.results?.is_new_user)
+		await finishLogin(provider, res2.results?.user, !!res2.results?.is_new_user, res2.message)
 	} catch (e) {
-		if (e && e.code === 409) {
-			track('bind_conflict_show', { method: provider })
-			bindDialogMode.value = 'conflict'
-			bindDialogTitle.value = t('account_exists')
-			bindDialogContent.value = e.message || t('bind_conflict_hint')
-			bindDialogOpen.value = true
-			return
-		}
 		uni.showToast({ title: e?.message || t('request_failed'), icon: 'none' })
 	} finally {
 		busy.value = false
@@ -213,6 +330,11 @@ onMounted(async () => {
 
 <style lang="scss" scoped>
 @import '@/styles/manna-theme.scss';
+
+.page-wrap {
+	min-height: 100vh;
+	position: relative;
+}
 
 .page {
 	position: relative;

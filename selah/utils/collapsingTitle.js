@@ -1,5 +1,9 @@
 /**
- * 可滚动页大标题：随上滑收拢为顶栏居中小标题，并与两侧按钮垂直居中对齐。
+ * 可滚动页大标题：随上滑收拢为顶栏居中小标题。
+ *
+ * 重要：不在 sticky 头内动态改 spacer 高度（会触发布局回流 → 安卓顶部抖动）。
+ * hero：大标题在吸顶头下方随页面滚走；吸顶栏内小标题仅用 opacity 显隐。
+ * bar：标题本就在导航行内，仅做位置/字号插值（不改容器高度）。
  */
 import { ref, computed } from 'vue'
 import { onPageScroll } from '@dcloudio/uni-app'
@@ -21,14 +25,13 @@ function lerp(a, b, t) {
  * @param {number} [opts.statusBarPx=0]
  * @param {number} [opts.range=72] 完全收拢所需滚动距离（px）
  * @param {'hero'|'bar'} [opts.mode='hero']
- *   hero：大标题在导航下方 → 收拢到导航垂直中心并水平居中
- *   bar：标题已在导航行内（偏左）→ 收拢为水平居中并略缩小
  * @param {number} [opts.fontStartRpx]
  * @param {number} [opts.fontEndRpx]
  * @param {number} [opts.navHRpx=88]
- * @param {number} [opts.titleBlockRpx=72] hero 模式下展开态占位高度
+ * @param {number} [opts.titleBlockRpx=72] 保留兼容；hero 不再用其做吸顶内动画高度
  * @param {number} [opts.leftStartPercent=18] bar 模式起始 left%
- * @param {number} [opts.contentInsetRpx=0] hero 模式展开态距左（当 page-head 通栏时）
+ * @param {number} [opts.contentInsetRpx=0]
+ * @param {(scrollTop: number) => void} [opts.onScroll] 与收拢共用同一 onPageScroll，避免重复注册
  */
 export function useCollapsingTitle(opts = {}) {
 	const statusBarPx = opts.statusBarPx ?? 0
@@ -39,23 +42,59 @@ export function useCollapsingTitle(opts = {}) {
 	const navHRpx = opts.navHRpx ?? 88
 	const titleBlockRpx = opts.titleBlockRpx ?? 72
 	const leftStartPercent = opts.leftStartPercent ?? 18
-	const contentInsetRpx = opts.contentInsetRpx ?? 0
+
+	// 启动时缓存，避免滚动帧内反复 getSystemInfoSync / upx2px
+	let winW = 375
+	let navH = 44
+	let fontStart = 28
+	let fontEnd = 17
+	let titleBlockPx = 36
+	try {
+		winW = uni.getSystemInfoSync().windowWidth || 375
+		navH = uni.upx2px(navHRpx)
+		fontStart = uni.upx2px(fontStartRpx)
+		fontEnd = uni.upx2px(fontEndRpx)
+		titleBlockPx = uni.upx2px(titleBlockRpx)
+	} catch (e) {}
 
 	const progress = ref(0)
+	let ticking = false
+	let pendingTop = 0
+	let lastApplied = -1
+
+	function applyScrollTop(scrollTop) {
+		const next = clamp01((scrollTop || 0) / range)
+		if (Math.abs(next - lastApplied) < 0.01) return
+		lastApplied = next
+		progress.value = next
+	}
+
+	const extraOnScroll = typeof opts.onScroll === 'function' ? opts.onScroll : null
 
 	onPageScroll((e) => {
-		progress.value = clamp01((e.scrollTop || 0) / range)
+		pendingTop = e.scrollTop || 0
+		if (extraOnScroll) extraOnScroll(pendingTop)
+		if (ticking) return
+		ticking = true
+		const flush = () => {
+			ticking = false
+			applyScrollTop(pendingTop)
+		}
+		if (typeof requestAnimationFrame === 'function') {
+			requestAnimationFrame(flush)
+		} else {
+			setTimeout(flush, 16)
+		}
 	})
 
 	const eased = computed(() => smoothstep(progress.value))
 
+	/** bar 模式：导航行内标题插值。hero 模式：吸顶栏内的收拢小标题 */
 	const titleStyle = computed(() => {
 		const p = eased.value
-		const navH = uni.upx2px(navHRpx)
-		const fontStart = uni.upx2px(fontStartRpx)
-		const fontEnd = uni.upx2px(fontEndRpx)
-		const fontSize = lerp(fontStart, fontEnd, p)
-		const winW = uni.getSystemInfoSync().windowWidth || 375
+		const fontSize = mode === 'bar'
+			? lerp(fontStart, fontEnd, p)
+			: fontEnd
 
 		if (mode === 'bar') {
 			return {
@@ -74,36 +113,50 @@ export function useCollapsingTitle(opts = {}) {
 			}
 		}
 
-		const topExpanded = statusBarPx + navH + uni.upx2px(8)
-		const topCollapsed = statusBarPx + (navH - fontEnd) / 2
-		const leftStart = contentInsetRpx
-			? (uni.upx2px(contentInsetRpx) / winW) * 100
-			: 0
+		// hero：小标题固定在导航垂直居中，仅透明度变化（不改 left/top 避免抖动）
 		return {
 			position: 'absolute',
-			left: `${lerp(leftStart, 50, p)}%`,
-			top: `${lerp(topExpanded, topCollapsed, p)}px`,
-			transform: `translateX(${lerp(0, -50, p)}%)`,
+			top: '50%',
+			left: '50%',
+			transform: 'translate(-50%, -50%)',
 			fontSize: `${fontSize}px`,
 			lineHeight: '1.15',
 			zIndex: 1,
-			maxWidth: `${lerp(92, 52, p)}%`,
+			maxWidth: '52%',
 			overflow: 'hidden',
 			textOverflow: 'ellipsis',
 			whiteSpace: 'nowrap',
 			pointerEvents: 'none',
+			opacity: p,
 		}
 	})
 
+	/** hero 大标题（放在吸顶头下方、随页面滚动） */
+	const heroTitleStyle = computed(() => {
+		const p = eased.value
+		return {
+			opacity: 1 - p,
+			transform: `translateY(${lerp(0, -8, p)}px)`,
+			// 收拢后不挡点击
+			pointerEvents: p > 0.85 ? 'none' : 'auto',
+		}
+	})
+
+	/** 兼容旧用法：不再在 sticky 内收缩高度 */
 	const spacerStyle = computed(() => {
 		if (mode === 'bar') return { height: '0px' }
-		const h = lerp(uni.upx2px(titleBlockRpx), 0, eased.value)
-		return { height: `${Math.max(0, h)}px` }
+		return { height: '0px' }
 	})
 
 	return {
 		titleProgress: progress,
 		titleStyle,
+		heroTitleStyle,
 		spacerStyle,
+		/** @deprecated 仅兼容；恒为 0，大标题请放到吸顶头外 */
+		titleBlockPx,
+		statusBarPx,
+		navH,
+		winW,
 	}
 }

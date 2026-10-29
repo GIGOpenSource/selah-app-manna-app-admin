@@ -55,7 +55,7 @@
 					</view>
 				</view>
 
-				<view class="cta" @tap="pay">
+				<view v-if="verifyEnabled" class="cta" @tap="pay">
 					<text class="cta-text">{{ ctaText }}</text>
 				</view>
 
@@ -65,7 +65,7 @@
 				</view>
 
 				<view class="foot">
-					<text class="foot-link" @tap="restore">{{ t('restore_short') }}</text>
+					<text v-if="restoreEnabled" class="foot-link" @tap="restore">{{ t('restore_short') }}</text>
 					<text class="foot-link" @tap="openLegalPage('subscription')">{{ t('legal_terms_full') }}</text>
 					<text class="foot-link" @tap="goBack">{{ t('other') }}</text>
 				</view>
@@ -87,9 +87,10 @@ import { track } from '@/utils/analytics.js'
 import { safeBack } from '@/utils/nav.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
 import { openLegalPage } from '@/utils/openLegal.js'
-import { loadWithCache } from '@/utils/pageCache.js'
-import { VIP_PLANS_KEY } from '@/utils/wallpaperCache.js'
+import { loadWithCache, readPageCache } from '@/utils/pageCache.js'
+import { VIP_PLANS_KEY, APP_CONFIG_KEY } from '@/utils/wallpaperCache.js'
 import { APP_KEY } from '@/config/config.js'
+import { purchaseIap, restoreIapPurchases } from '@/utils/iap.js'
 
 const { t, locale } = useI18n()
 const statusBarPx = getStatusBarPx()
@@ -98,9 +99,11 @@ const trialDays = ref(null)
 const selected = ref('yearly')
 const planOptions = ref([])
 const benefits = ref([])
-const ctaText = ref('Try for $0.00')
+const ctaText = ref(t('try_for_zero'))
 const payTrigger = ref('other')
 const trialRemind = ref(uni.getStorageSync('vip_trial_remind') === true)
+const restoreEnabled = ref(true)
+const verifyEnabled = ref(true)
 
 const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -116,11 +119,18 @@ function addDays(base, n) {
 
 function formatVipDay(date) {
 	const loc = String(locale.value || 'en')
-	if (loc.startsWith('zh')) {
+	if (loc.startsWith('zh') || loc.startsWith('ja')) {
 		return `${date.getMonth() + 1}月${date.getDate()}日`
 	}
-	const day = String(date.getDate()).padStart(2, '0')
-	return `${day} ${MONTHS_EN[date.getMonth()]}`
+	if (loc.startsWith('ko')) {
+		return `${date.getMonth() + 1}월 ${date.getDate()}일`
+	}
+	try {
+		return new Intl.DateTimeFormat(loc, { month: 'short', day: 'numeric' }).format(date)
+	} catch (e) {
+		const day = String(date.getDate()).padStart(2, '0')
+		return `${day} ${MONTHS_EN[date.getMonth()]}`
+	}
 }
 
 function planMoney() {
@@ -203,6 +213,9 @@ onLoad((q) => {
 })
 
 onMounted(async () => {
+	const cfg = readPageCache(APP_CONFIG_KEY) || {}
+	if (cfg.iap_restore_enabled === false) restoreEnabled.value = false
+	if (cfg.iap_verify_enabled === false) verifyEnabled.value = false
 	try {
 		await loadWithCache(
 			VIP_PLANS_KEY,
@@ -251,6 +264,10 @@ function toggleRemind() {
 }
 
 async function pay() {
+	if (!verifyEnabled.value) {
+		uni.showToast({ title: t('request_failed'), icon: 'none' })
+		return
+	}
 	const plan = currentPlan.value
 	const sys = uni.getSystemInfoSync?.() || {}
 	const platform = /android/i.test(sys.platform || sys.osName || '') ? 'android' : 'ios'
@@ -264,53 +281,67 @@ async function pay() {
 		pay_trigger_source: payTrigger.value,
 	})
 	try {
-		const tx = 'sandbox_' + Date.now()
+		const productId = plan.product_id || plan.store_product_id
+		const bought = await purchaseIap(productId)
 		const res = await apiVipVerify({
-			platform: plan.platform || platform,
-			product_id: plan.product_id || plan.store_product_id,
-			transaction_id: tx,
-			sandbox: true,
-			is_trial: true,
+			platform: plan.platform || bought.platform || platform,
+			product_id: productId,
+			transaction_id: bought.transaction_id,
+			receipt_data: bought.receipt_data,
+			original_transaction_id: bought.original_transaction_id,
+			sandbox: false,
+			is_trial: false,
 			pay_trigger_source: payTrigger.value,
 		})
 		setUser(res.results.user)
 		info.value.vip_level = 'vip'
-		info.value.is_trial = true
+		info.value.is_trial = !!res.results.user?.is_trial
 		info.value.vip_expire_at = res.results.user?.vip_expire_at
 		track('vip_pay_success', {
 			plan_id: plan.plan_id || selected.value,
-			order_id: tx,
+			order_id: bought.transaction_id,
 			pay_trigger_source: payTrigger.value,
-			is_trial: true,
+			is_trial: !!res.results.user?.is_trial,
 		})
-		track('vip_trial_start', { plan_id: plan.plan_id || selected.value })
 		uni.showToast({ title: t('vip_activated'), icon: 'none' })
 	} catch (e) {
 		track('vip_pay_fail', {
 			plan_id: plan.plan_id || selected.value,
 			reason: String((e && e.message) || 'fail'),
 		})
+		uni.showToast({
+			title: e?.code === 'STORE_UNAVAILABLE' ? t('vip_store_unavailable') : (e?.message || t('network_error')),
+			icon: 'none',
+		})
 	}
 }
 
 async function restore() {
+	if (!restoreEnabled.value) return
 	track('vip_restore_click', { platform: 'ios' })
-	uni.showModal({
-		title: t('restore_purchases'),
-		editable: true,
-		placeholderText: 'transaction_id',
-		success: async (r) => {
-			if (!r.confirm) return
-			try {
-				const res = await apiVipRestore({ transaction_id: r.content })
-				setUser(res.results.user)
-				track('vip_restore_result', { success: true })
-				uni.showToast({ title: t('restored'), icon: 'none' })
-			} catch (e) {
-				track('vip_restore_result', { success: false, reason: 'not_found' })
-			}
-		},
-	})
+	try {
+		const rows = await restoreIapPurchases()
+		if (!rows.length) {
+			uni.showToast({ title: t('vip_store_unavailable'), icon: 'none' })
+			return
+		}
+		let last = null
+		for (const row of rows) {
+			last = await apiVipRestore({
+				transaction_id: row.transaction_id,
+				original_transaction_id: row.original_transaction_id,
+			})
+		}
+		if (last?.results?.user) setUser(last.results.user)
+		track('vip_restore_result', { success: true })
+		uni.showToast({ title: t('restored'), icon: 'none' })
+	} catch (e) {
+		track('vip_restore_result', { success: false, reason: String((e && e.message) || 'fail') })
+		uni.showToast({
+			title: e?.code === 'STORE_UNAVAILABLE' ? t('vip_store_unavailable') : (e?.message || t('network_error')),
+			icon: 'none',
+		})
+	}
 }
 </script>
 
@@ -359,7 +390,7 @@ async function restore() {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 16rpx;
+	& > *:not(:first-child) { margin-top: 16rpx; }
 	padding: 0 0 32rpx;
 	text-align: center;
 }
@@ -391,7 +422,7 @@ async function restore() {
 .benefits {
 	display: flex;
 	flex-direction: column;
-	gap: 12rpx;
+	& > *:not(:first-child) { margin-top: 12rpx; }
 	padding: 8rpx 8rpx 28rpx;
 }
 .benefit-line {
@@ -403,7 +434,7 @@ async function restore() {
 .timeline {
 	display: flex;
 	flex-direction: column;
-	gap: 48rpx;
+	& > *:not(:first-child) { margin-top: 48rpx; }
 	padding: 48rpx 32rpx;
 	background: rgba(255, 255, 255, 0.92);
 	border: 2rpx solid rgba(33, 33, 33, 0.12);
@@ -415,7 +446,7 @@ async function restore() {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	gap: 28rpx;
+	& > *:not(:first-child) { margin-left: 28rpx; }
 }
 .step-ico {
 	width: 72rpx;
@@ -427,12 +458,12 @@ async function restore() {
 	min-width: 0;
 	display: flex;
 	flex-direction: column;
-	gap: 8rpx;
+	& > *:not(:first-child) { margin-top: 8rpx; }
 }
 .step-title {
-	font-family: $manna-font-serif;
-	font-size: 36rpx;
-	font-weight: 400;
+	font-family: $manna-font-body;
+	font-size: 32rpx;
+	font-weight: 700;
 	line-height: 1.25;
 	color: $manna-btn-text;
 }

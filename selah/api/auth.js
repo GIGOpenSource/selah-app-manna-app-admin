@@ -8,10 +8,7 @@ export function apiDeviceLogin(params, other = {}) {
 	return postRequest('/auth/device-login/', params, other)
 }
 
-/**
- * Google/Apple 登录并绑定本机 device_id（免登）。
- * 冲突时业务码 409，需带 confirm_switch 再调一次。
- */
+/** Google/Apple 登录并绑定本机 device_id（免登）。 */
 export function apiOauthLogin(params, other = {}) {
 	return postRequest('/auth/oauth-login/', params, { skipAuthRetry: true, ...other })
 }
@@ -41,7 +38,17 @@ export function apiUpdateProfile(params) {
 	return postRequest('/auth/update-profile/', params)
 }
 
-/** 登出并失效服务端会话 */
+/** 登出并失效服务端会话（不清账号） */
 export function apiLogout() {
 	return postRequest('/auth/logout/', {})
+}
+
+/** 申请注销：进入 7 天冷静期，服务端踢全部会话 */
+export function apiDeleteAccount(params = {}, other = {}) {
+	return postRequest('/auth/delete-account/', params, { showLoading: true, ...other })
+}
+
+/** 冷静期内撤销注销 */
+export function apiCancelDelete(params = {}, other = {}) {
+	return postRequest('/auth/cancel-delete/', params, { showLoading: true, ...other })
 }

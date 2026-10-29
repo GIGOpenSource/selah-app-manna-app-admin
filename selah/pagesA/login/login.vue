@@ -1,8 +1,9 @@
 <!--
   Login：布局对齐 Welcome（居中文案 + 底部 CTA 区）；底图独立 login-bg.jpg。
-  Apple / Google / 快速登录。
+  iOS 苹果登录 / Android 谷歌登录 / 快速登录。
 -->
 <template>
+	<view class="page-wrap">
 	<view class="page">
 		<view class="bg" aria-hidden="true">
 			<view class="bg-base" />
@@ -22,11 +23,21 @@
 		</view>
 
 		<view class="footer">
-			<view class="cta primary" :class="{ disabled: busy }" @tap="loginOauth('apple')">
+			<view
+				v-if="oauthProvider === 'apple'"
+				class="cta primary"
+				:class="{ disabled: busy }"
+				@tap="loginOauth('apple')"
+			>
 				<image class="cta-ico" src="/static/ui/login-ico-apple.svg" mode="aspectFit" />
 				<text class="cta-text light">{{ t('login_apple') }}</text>
 			</view>
-			<view class="cta outline" :class="{ disabled: busy }" @tap="loginOauth('google')">
+			<view
+				v-else
+				class="cta outline"
+				:class="{ disabled: busy }"
+				@tap="loginOauth('google')"
+			>
 				<image class="cta-ico" src="/static/ui/login-ico-google.svg" mode="aspectFit" />
 				<text class="cta-text">{{ t('login_google') }}</text>
 			</view>
@@ -40,15 +51,17 @@
 				<text class="legal-link" @click.stop="openLegalPage('privacy')">{{ t('legal_privacy') }}</text>
 			</view>
 		</view>
+	</view>
 
 		<selah-dialog
-			v-model:visible="bindDialogOpen"
-			:title="bindDialogTitle"
-			:content="bindDialogContent"
-			:confirm-text="t('ok') || 'OK'"
-			:cancel-text="t('cancel')"
-			@confirm="onBindDialogConfirm"
-			@cancel="onBindDialogCancel"
+			v-model:visible="deletionOpen"
+			:title="t('deletion_pending_title')"
+			:content="deletionBody"
+			:confirm-text="t('deletion_keep')"
+			:cancel-text="t('deletion_continue')"
+			:close-on-mask="false"
+			@confirm="onDeletionKeep"
+			@cancel="onDeletionContinue"
 		/>
 	</view>
 </template>
@@ -57,59 +70,115 @@
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiOauthLogin } from '@/api/auth.js'
-import { ensureLogin, setUser, shouldForceLoginPage, clearForceLoginPage } from '@/utils/session.js'
-import { track, setUserProps } from '@/utils/analytics.js'
+import { ensureLogin, setUser, shouldForceLoginPage, clearForceLoginPage, hasLocalSession, getUser, FORCE_LOGIN_KEY } from '@/utils/session.js'
+import { setUserProps } from '@/utils/analytics.js'
+import { logFirebaseEvent } from '@/utils/firebase.js'
 import { safeBack } from '@/utils/nav.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
-import { getSandboxOauthId, buildDeviceAuthPayload } from '@/utils/oauth.js'
+import {
+	buildOauthLoginPayload,
+	getLoginOauthProvider,
+	identityFromAppleSuccess,
+	identityFromGoogleSuccess,
+	isOauthUserCancel,
+	startUniLogin,
+} from '@/utils/oauth.js'
 import { routeAfterAuth } from '@/utils/coldStart.js'
 import { openLegalPage } from '@/utils/openLegal.js'
 import { getCurrentLanguage } from '@/utils/storageKeys.js'
+import {
+	isDeletionPending,
+	deletionPromptContent,
+	cancelAccountDeletion,
+} from '@/utils/accountDeletion.js'
 
 const { t } = useI18n()
 const statusBarPx = getStatusBarPx()
 const busy = ref(false)
-const forceGate = ref(shouldForceLoginPage())
-const bindDialogOpen = ref(false)
-const bindDialogTitle = ref('')
-const bindDialogContent = ref('')
-const bindDialogMode = ref('prompt')
-const bindProvider = ref('google')
+const forceGate = ref(shouldForceLoginPage() || !hasLocalSession())
+const oauthProvider = getLoginOauthProvider()
+const deletionOpen = ref(false)
+const deletionBody = ref('')
+const pendingAfterAuth = ref(null)
 
 function goBack() {
 	if (forceGate.value) return
 	safeBack('/pagesA/settings/settings')
 }
 
-async function finishLogin(method, user, isNew) {
+async function enterApp(method, user, isNew, message) {
 	clearForceLoginPage()
 	forceGate.value = false
-	setUser(user)
+	const u = user && typeof user === 'object' ? user : {}
+	setUser(u)
 	setUserProps({
-		user_id: user.user_id,
-		vip_level: user.vip_level,
-		register_country: user.register_country || '',
-		gender: user.gender || '',
-		faith_type: user.faith_type,
-		prayer_frequency: user.prayer_frequency,
-		login_type: user.login_type || method,
-		system_lang: user.system_lang || getCurrentLanguage() || 'en',
+		user_id: u.user_id,
+		vip_level: u.vip_level,
+		register_country: u.register_country || '',
+		gender: u.gender || '',
+		faith_type: u.faith_type,
+		prayer_frequency: u.prayer_frequency,
+		login_type: u.login_type || method,
+		system_lang: u.system_lang || getCurrentLanguage() || 'en',
 	})
-	track('login_success', {
-		method,
-		is_new_user: !!isNew,
+	const title = String(message || '').trim()
+	if (title) {
+		uni.showToast({
+			title,
+			icon: 'none',
+		})
+	}
+	await routeAfterAuth(u, { isNew: !!isNew })
+}
+
+async function finishLogin(method, user, isNew, message) {
+	const u = user && typeof user === 'object' ? user : {}
+	setUser(u)
+	setUserProps({
+		user_id: u.user_id,
+		vip_level: u.vip_level,
+		register_country: u.register_country || '',
+		gender: u.gender || '',
+		faith_type: u.faith_type,
+		prayer_frequency: u.prayer_frequency,
+		login_type: u.login_type || method,
+		system_lang: u.system_lang || getCurrentLanguage() || 'en',
 	})
-	uni.showToast({
-		title: method === 'device' ? t('login_quick_ok') : t('bound'),
-		icon: 'none',
-	})
-	await routeAfterAuth(user, { isNew: !!isNew })
+	if (isDeletionPending(u)) {
+		pendingAfterAuth.value = { method, user: u, isNew, message }
+		deletionBody.value = deletionPromptContent(u)
+		busy.value = false
+		deletionOpen.value = true
+		return
+	}
+	await enterApp(method, u, isNew, message || (method === 'device' ? t('login_quick_ok') : t('bound')))
+}
+
+async function onDeletionKeep() {
+	try {
+		const next = await cancelAccountDeletion()
+		const pending = pendingAfterAuth.value || {}
+		pendingAfterAuth.value = null
+		const user = next || pending.user || getUser()
+		uni.showToast({ title: t('deletion_keep_ok'), icon: 'none' })
+		await enterApp(pending.method || 'device', user, pending.isNew, '')
+	} catch (e) {
+		uni.showToast({ title: e?.message || t('request_failed'), icon: 'none' })
+	}
+}
+
+function onDeletionContinue() {
+	pendingAfterAuth.value = null
+	try {
+		uni.setStorageSync(FORCE_LOGIN_KEY, '1')
+	} catch (e) {}
+	forceGate.value = true
 }
 
 async function quickLogin() {
 	if (busy.value) return
 	busy.value = true
-	track('login_page_continue', { method: 'device' })
+	try { logFirebaseEvent('login_quick_click') } catch (e) {}
 	try {
 		const user = await ensureLogin({ explicit: true })
 		await finishLogin('device', user, !!uni.getStorageSync('is_new_user'))
@@ -120,74 +189,73 @@ async function quickLogin() {
 	}
 }
 
+async function applyOauthResult(provider, res) {
+	if (res.results?.token) uni.setStorageSync('token', res.results.token)
+	uni.setStorageSync('is_new_user', !!res.results?.is_new_user)
+	await finishLogin(
+		provider,
+		res.results.user,
+		!!res.results?.is_new_user,
+		res.message || res.msg || '',
+	)
+}
+
 function loginOauth(provider) {
 	if (busy.value) return
-	bindProvider.value = provider
-	track('bind_prompt_click', { target: provider, scene: 'login_page' })
-	track('login_page_continue', { method: provider })
-	bindDialogMode.value = 'prompt'
-	bindDialogTitle.value = provider === 'apple' ? t('login_apple') : t('login_google')
-	bindDialogContent.value = t('bind_sandbox')
-	bindDialogOpen.value = true
+	if (provider === 'google') {
+		try { logFirebaseEvent('login_google_click') } catch (e) {}
+	}
+	startUniLogin(provider, {
+		success: async (success) => {
+			busy.value = true
+			try {
+				const identity =
+					provider === 'apple'
+						? identityFromAppleSuccess(success)
+						: await identityFromGoogleSuccess(success)
+				if (provider === 'apple' && !identity.id_token) {
+					const err = new Error('missing_id_token')
+					err.errMsg = 'missing_id_token'
+					throw err
+				}
+				const payload = buildOauthLoginPayload(provider, identity)
+				const res = await apiOauthLogin(payload)
+				await applyOauthResult(provider, res)
+				if (provider === 'google') {
+					try { logFirebaseEvent('login_google_result') } catch (e) {}
+				}
+			} catch (e) {
+				toastNativeOauthFail(e)
+			} finally {
+				busy.value = false
+			}
+		},
+		fail: (err) => toastNativeOauthFail(err),
+	})
 }
 
-function onBindDialogCancel() {
-	if (bindDialogMode.value === 'conflict') {
-		track('bind_conflict_cancel', { method: bindProvider.value })
-	}
-}
-
-async function runOauthLogin(confirmSwitch) {
-	const provider = bindProvider.value
-	const payload = {
-		...buildDeviceAuthPayload(),
-		provider,
-		oauth_id: getSandboxOauthId(provider),
-		confirm_switch: !!confirmSwitch,
-	}
-	return apiOauthLogin(payload, { silentBizCodes: [409] })
-}
-
-async function onBindDialogConfirm() {
-	if (busy.value) return
-	busy.value = true
-	const provider = bindProvider.value
-	try {
-		if (bindDialogMode.value === 'conflict') {
-			track('bind_conflict_confirm', { method: provider })
-			const res2 = await runOauthLogin(true)
-			if (res2.results?.token) uni.setStorageSync('token', res2.results.token)
-			uni.setStorageSync('is_new_user', !!res2.results?.is_new_user)
-			await finishLogin(provider, res2.results.user, !!res2.results?.is_new_user)
-			return
-		}
-		const res = await runOauthLogin(false)
-		if (res.results?.token) uni.setStorageSync('token', res.results.token)
-		uni.setStorageSync('is_new_user', !!res.results?.is_new_user)
-		track('bind_success', { method: provider })
-		await finishLogin(provider, res.results.user, !!res.results?.is_new_user)
-	} catch (e) {
-		if (e && e.code === 409) {
-			track('bind_conflict_show', { method: provider })
-			bindDialogMode.value = 'conflict'
-			bindDialogTitle.value = t('account_exists')
-			bindDialogContent.value = e.message || t('bind_conflict_hint')
-			bindDialogOpen.value = true
-			return
-		}
-	} finally {
-		busy.value = false
-	}
+function toastNativeOauthFail(e) {
+	if (isOauthUserCancel(e)) return
+	// 接口层已 toast 过的业务/网络错误不再重复提示
+	if (e && (typeof e.code === 'number' || e.statusCode)) return
+	uni.showToast({
+		title: String(e?.errMsg || e?.message || t('request_failed')),
+		icon: 'none',
+	})
 }
 
 onMounted(() => {
-	track('login_page_view', {})
+	try { logFirebaseEvent('loginPage_show') } catch (e) {}
 })
 </script>
 
 <style lang="scss" scoped>
 @import '@/styles/selah-theme.scss';
 
+.page-wrap {
+	min-height: 100vh;
+	position: relative;
+}
 .page {
 	position: relative;
 	min-height: 100vh;

@@ -1,29 +1,27 @@
 <!--
-  测验管理（Selah 3.0）：App × 语言 × 设备三维；套题 CRUD + 题目编辑。
+  测验管理（Selah 3.0）：套题 CRUD + 题目编辑。
 -->
 <template>
-  <div class="container">
+  <div class="cms-page">
     <el-alert
       type="info"
       :closable="false"
       show-icon
-      class="page-tip"
-      title="Selah 自有测验；禁止竞品品牌名。与 Compose/社区无关。"
+      title="Selah 自有测验；与顶部 App 切换到 Manna 后的「Manna Quiz」不是同一套，切错会改到另一品牌数据。"
     />
-    <ScopeFilter
-      mode="browse"
-      v-model:app-key="appKey"
-      v-model:language="language"
-      v-model:platform="platform"
-      @change="load(1)"
-    />
-    <div class="pro-toolbar">
-      <div class="pro-toolbar-title">测验列表</div>
-      <div class="pro-toolbar-actions">
-        <el-button type="primary" :icon="CirclePlusFilled" @click="open()">新建测验</el-button>
+    <el-tabs v-model="panel" style="margin-bottom: 8px" @tab-change="onPanelChange">
+      <el-tab-pane label="测验列表" name="list" />
+      <el-tab-pane label="回收站" name="trash" />
+    </el-tabs>
+    <div class="container">
+      <p v-if="panel === 'trash'" class="plugins-tips">软删除的测验可在此恢复；恢复后回到「测验列表」。</p>
+      <div class="pro-toolbar">
+        <div class="pro-toolbar-actions">
+          <el-button v-if="panel === 'list'" type="primary" :icon="CirclePlusFilled" @click="open()">新建测验</el-button>
+          <el-button v-else @click="load(1)">刷新回收站</el-button>
+        </div>
       </div>
-    </div>
-    <el-table :data="rows" v-loading="loading">
+      <el-table :data="rows" v-loading="loading">
       <el-table-column prop="id" label="ID" width="70" />
       <el-table-column label="封面" width="80">
         <template #default="{ row }">
@@ -46,26 +44,31 @@
           <el-tag :type="row.is_vip ? 'warning' : 'info'" size="small">{{ row.is_vip ? '是' : '否' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="app_key" label="App" width="90">
-        <template #default="{ row }">{{ row.app_key || '全部' }}</template>
+      <el-table-column prop="app_key" label="App" min-width="110" width="110">
+        <template #default="{ row }">{{ row.app_key || '空维' }}</template>
       </el-table-column>
-      <el-table-column prop="language" label="语言" width="80">
+      <el-table-column prop="language" label="语言" min-width="100" width="100">
         <template #default="{ row }">{{ row.language || '全部' }}</template>
       </el-table-column>
-      <el-table-column prop="platform" label="设备" width="90">
+      <el-table-column v-if="showPlat" prop="platform" label="设备" min-width="100" width="100">
         <template #default="{ row }">{{ row.platform || '全部' }}</template>
       </el-table-column>
-      <el-table-column prop="sort_order" label="排序" width="70" />
-      <el-table-column prop="enabled" label="启用" width="70">
+      <el-table-column prop="sort_order" label="排序" min-width="80" width="80" />
+      <el-table-column prop="enabled" label="启用" min-width="90" width="90">
         <template #default="{ row }">
           <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '是' : '否' }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="220" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" @click="open(row)">编辑</el-button>
-          <el-button link type="primary" @click="openQuestions(row)">管理题目</el-button>
-          <el-button link type="danger" @click="onDelete(row.id)">删除</el-button>
+          <template v-if="panel === 'trash'">
+            <el-button link type="primary" @click="onRestore(row.id)">恢复</el-button>
+          </template>
+          <template v-else>
+            <el-button link type="primary" @click="open(row)">编辑</el-button>
+            <el-button link type="primary" @click="openQuestions(row)">管理题目</el-button>
+            <el-button link type="danger" @click="onDelete(row.id)">删除</el-button>
+          </template>
         </template>
       </el-table-column>
     </el-table>
@@ -77,6 +80,7 @@
       v-model:current-page="page"
       @current-change="load"
     />
+    </div>
 
     <el-dialog v-model="visible" :title="form.id ? '编辑测验' : '新建测验'" width="560px" destroy-on-close>
       <el-form label-width="90px">
@@ -97,23 +101,10 @@
           </el-upload>
           <el-input v-model="form.cover_url" placeholder="上传后自动填入 URL" style="margin-top: 8px" />
         </el-form-item>
-        <el-form-item label="App">
-          <el-select v-model="form.app_key" filterable style="width: 100%">
-            <el-option label="全局（两 App 可见）" value="" />
-            <el-option v-for="a in APP_KEYS" :key="a" :label="a" :value="a" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="语言">
           <el-select v-model="form.language" style="width: 100%">
             <el-option label="全部语言" value="" />
             <el-option v-for="l in LANG_OPTIONS" :key="l.value" :label="l.label" :value="l.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="设备">
-          <el-select v-model="form.platform" style="width: 100%">
-            <el-option label="全部设备" value="" />
-            <el-option label="iOS" value="ios" />
-            <el-option label="Android" value="android" />
           </el-select>
         </el-form-item>
         <el-form-item label="排序"><el-input-number v-model="form.sort_order" :min="0" /></el-form-item>
@@ -142,8 +133,8 @@
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="stem" label="题干" min-width="200" />
         <el-table-column prop="correct_key" label="正解" width="70" />
-        <el-table-column prop="sort_order" label="排序" width="70" />
-        <el-table-column prop="enabled" label="启用" width="70">
+        <el-table-column prop="sort_order" label="排序" min-width="80" width="80" />
+        <el-table-column prop="enabled" label="启用" min-width="90" width="90">
           <template #default="{ row }">
             <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '是' : '否' }}</el-tag>
           </template>
@@ -206,26 +197,25 @@
  * 测验套题 + 嵌套题目编辑。
  * 列表空维省略参数=不过滤；选具体维才精确筛。
  */
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CirclePlusFilled } from '@element-plus/icons-vue'
 import {
   fetchQuizzes,
   saveQuiz,
   deleteQuiz,
+  restoreQuiz,
   fetchQuizQuestions,
   saveQuizQuestion,
   deleteQuizQuestion,
   uploadFile,
 } from '../api'
-import ScopeFilter from '../components/ScopeFilter.vue'
 import { loadWithCache, clearPageCache } from '../utils/pageCache'
 import { browseScopeParams, defaultCreateAppKey } from '../utils/scopeParams'
-import { APP_KEYS, LANG_OPTIONS } from '../utils/enumZh'
+import { LANG_OPTIONS } from '../utils/enumZh'
+import { currentAppKey, shouldHidePlatform } from '../utils/productContext'
 
-const appKey = ref('')
-const language = ref('')
-const platform = ref('')
+const panel = ref('list')
 const rows = ref([])
 const page = ref(1)
 const total = ref(0)
@@ -240,9 +230,15 @@ const qRows = ref([])
 const qLoading = ref(false)
 const qFormVisible = ref(false)
 const qForm = ref({})
+const showPlat = !shouldHidePlatform()
+const showTrash = computed(() => panel.value === 'trash')
 
 function cacheKey() {
-  return `quizzes_p${page.value}_${appKey.value || ''}_${language.value || ''}_${platform.value || ''}`
+  return `quizzes_p${page.value}_${currentAppKey.value || ''}_t${showTrash.value ? 1 : 0}`
+}
+
+function onPanelChange() {
+  load(1)
 }
 
 async function load(p = page.value) {
@@ -253,12 +249,9 @@ async function load(p = page.value) {
       const params = {
         currentPage: page.value,
         pageSize: 20,
-        ...browseScopeParams({
-          appKey: appKey.value,
-          language: language.value,
-          platform: platform.value,
-        }),
+        ...browseScopeParams(),
       }
+      if (showTrash.value) params.trashed = 1
       const res = await fetchQuizzes(params)
       return {
         rows: res.results || [],
@@ -287,9 +280,9 @@ function open(row) {
         title: '',
         subtitle: '',
         cover_url: '',
-        app_key: defaultCreateAppKey(appKey.value),
-        language: language.value || '',
-        platform: platform.value || '',
+        app_key: defaultCreateAppKey(),
+        language: '',
+        platform: '',
         sort_order: 0,
         is_vip: false,
         enabled: true,
@@ -320,7 +313,11 @@ async function save() {
     return
   }
   try {
-    await saveQuiz(form.value)
+    await saveQuiz({
+      ...form.value,
+      app_key: defaultCreateAppKey(),
+      platform: '',
+    })
     ElMessage.success('已保存')
     visible.value = false
     clearPageCache(cacheKey())
@@ -332,14 +329,25 @@ async function save() {
 
 async function onDelete(id) {
   try {
-    await ElMessageBox.confirm('确认删除该测验？题目将无法从列表进入。', '删除确认', { type: 'warning' })
+    await ElMessageBox.confirm('确认删除该测验？可在回收站恢复。', '删除确认', { type: 'warning' })
     await deleteQuiz(id)
-    ElMessage.success('已删除')
+    ElMessage.success('已移入回收站')
     clearPageCache(cacheKey())
     load()
   } catch (e) {
     if (e === 'cancel' || e === 'close') return
     ElMessage.error(e.message || e.msg || '删除失败')
+  }
+}
+
+async function onRestore(id) {
+  try {
+    await restoreQuiz(id)
+    ElMessage.success('已恢复')
+    clearPageCache(cacheKey())
+    load()
+  } catch (e) {
+    ElMessage.error(e.message || e.msg || '恢复失败')
   }
 }
 
@@ -411,7 +419,9 @@ async function saveQuestion() {
     ElMessage.warning('至少需要 2 个有效选项（含 key）')
     return
   }
-  if (!options.some((o) => o.key === qForm.value.correct_key)) {
+  const want = String(qForm.value.correct_key || '').trim().toLowerCase()
+  const correctHit = options.find((o) => String(o.key || '').trim().toLowerCase() === want)
+  if (!correctHit) {
     ElMessage.warning('正解必须命中某个选项 key')
     return
   }
@@ -421,6 +431,7 @@ async function saveQuestion() {
       quiz_id: activeQuiz.value.id,
       stem,
       options,
+      correct_key: correctHit.key,
     })
     ElMessage.success('题目已保存')
     qFormVisible.value = false
@@ -447,12 +458,10 @@ async function onDeleteQuestion(id) {
 }
 
 onMounted(load)
+watch(currentAppKey, () => load(1))
 </script>
 
 <style scoped>
-.page-tip {
-  margin-bottom: 12px;
-}
 .table-td-thumb {
   width: 40px;
   height: 40px;
@@ -468,5 +477,8 @@ onMounted(load)
   display: flex;
   gap: 8px;
   align-items: center;
+}
+.pro-toolbar-actions {
+  margin-left: auto;
 }
 </style>

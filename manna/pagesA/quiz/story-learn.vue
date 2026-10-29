@@ -1,5 +1,5 @@
 <template>
-	<!-- Figma 869:1497 圣经故事学习；卡片缺则用 demo 知识卡 -->
+	<!-- Figma 869:1497 圣经故事学习 -->
 	<view class="page" :style="{ paddingTop: statusBar + 'px' }">
 		<image class="page__bg" :src="cover" mode="aspectFill" />
 		<view class="page__fade" />
@@ -10,7 +10,7 @@
 			</view>
 			<text class="nav__title">{{ t('quiz_bible_learning') }}</text>
 			<view class="balance">
-				<image class="balance__ico" src="/static/ui/quiz/ico-manna.svg" mode="aspectFit" />
+				<image class="balance__ico" src="/static/ui/quiz/ico-manna.png" mode="aspectFit" />
 				<text class="balance__n">{{ balance }}</text>
 			</view>
 		</view>
@@ -46,20 +46,19 @@ import { onLoad } from '@dcloudio/uni-app'
 import { t } from '@/i18n/index.js'
 import { apiMannaBalance } from '@/api/manna.js'
 import { apiQuizStoryDetail } from '@/api/quiz.js'
-import { withDemoStoryDetail, DEMO_STORY } from '@/utils/quizDemo.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
 
 const statusBar = getStatusBarPx()
-const storyId = ref(DEMO_STORY.id)
-const title = ref(DEMO_STORY.title)
-const cover = ref(DEMO_STORY.cover_url)
-const cards = ref(DEMO_STORY.cards)
+const storyId = ref('')
+const title = ref('')
+const cover = ref('')
+const cards = ref([])
 const idx = ref(0)
-const balance = ref(240)
+const balance = ref(0)
 const linkedLevelId = ref(null)
 
 onLoad((q) => {
-	storyId.value = String(q?.id || DEMO_STORY.id)
+	storyId.value = String(q?.id || '')
 	if (q?.title) title.value = decodeURIComponent(String(q.title))
 })
 
@@ -74,23 +73,25 @@ onMounted(async () => {
 		if (typeof bal?.results?.balance === 'number') balance.value = bal.results.balance
 	} catch (e) {}
 	try {
-		if (String(storyId.value).startsWith('demo-')) throw new Error('demo')
+		if (!storyId.value) throw new Error('no story')
 		const res = await apiQuizStoryDetail({ id: storyId.value })
 		const raw = res?.results || {}
 		title.value = raw.title || title.value
-		cover.value = raw.cover_url || cover.value
+		cover.value = raw.cover_url || raw.card_url || cover.value
 		const cardsRaw = raw.knowledge_cards || raw.cards || []
 		cards.value = Array.isArray(cardsRaw) ? cardsRaw : []
 		linkedLevelId.value = raw.linked_level_id || null
 		if (linkedLevelId.value) {
 			uni.setStorageSync('manna_quiz_last_level_id', linkedLevelId.value)
 		}
+		try {
+			const saved = uni.getStorageSync(`manna_story_learn_${storyId.value}`)
+			const n = Number(saved)
+			if (Number.isFinite(n) && n >= 0 && n < cards.value.length) idx.value = n
+		} catch (e) {}
 	} catch (e) {
-		const d = withDemoStoryDetail(DEMO_STORY, title.value)
-		title.value = d.title
-		cover.value = d.cover_url || cover.value
-		cards.value = d.cards?.length ? d.cards : DEMO_STORY.cards
-		linkedLevelId.value = d.linked_level_id || null
+		cards.value = []
+		uni.showToast({ title: e?.message || t('network_error'), icon: 'none' })
 	}
 })
 
@@ -103,8 +104,14 @@ function onGet() {
 	}
 	if (idx.value < cards.value.length - 1) {
 		idx.value += 1
+		try {
+			uni.setStorageSync(`manna_story_learn_${storyId.value}`, idx.value)
+		} catch (e) {}
 		return
 	}
+	try {
+		uni.removeStorageSync(`manna_story_learn_${storyId.value}`)
+	} catch (e) {}
 	uni.redirectTo({
 		url: `/pagesA/quiz/story-done?id=${encodeURIComponent(storyId.value)}&title=${encodeURIComponent(title.value)}&level_id=${linkedLevelId.value || ''}`,
 	})
@@ -156,7 +163,7 @@ $quiz-ok: #52aa4b;
 	display: flex;
 	align-items: center;
 	padding: 20rpx 40rpx;
-	gap: 8rpx;
+	& > *:not(:first-child) { margin-left: 8rpx; }
 }
 
 .nav__back {
@@ -170,15 +177,14 @@ $quiz-ok: #52aa4b;
 .nav__press { opacity: 0.7; }
 .nav__title {
 	flex: 1;
-	font-weight: 700;
-	font-size: 36rpx;
+	@include manna-nav-title;
 	color: #000;
 }
 
 .balance {
 	display: flex;
 	align-items: center;
-	gap: 12rpx;
+	& > *:not(:first-child) { margin-left: 12rpx; }
 	padding: 16rpx 24rpx;
 	border-radius: 80rpx;
 	background: rgba(33, 33, 33, 0.5);
@@ -208,13 +214,19 @@ $quiz-ok: #52aa4b;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 40rpx;
+	& > *:not(:first-child) { margin-top: 40rpx; }
 }
 
-.prog { display: flex; flex-direction: column; align-items: center; gap: 16rpx; }
-.prog__lab { display: flex; gap: 4rpx; font-size: 24rpx; color: #212121; }
+.prog { display: flex; flex-direction: column; align-items: center;
+	& > *:not(:first-child) { margin-top: 16rpx; }
+}
+.prog__lab { display: flex; font-size: 24rpx; color: #212121;
+	& > *:not(:first-child) { margin-left: 4rpx; }
+}
 .prog__tot { opacity: 0.7; font-weight: 300; letter-spacing: 0.1em; }
-.prog__bars { display: flex; gap: 8rpx; }
+.prog__bars { display: flex;
+	& > *:not(:first-child) { margin-left: 8rpx; }
+}
 .prog__bar {
 	width: 64rpx;
 	height: 8rpx;

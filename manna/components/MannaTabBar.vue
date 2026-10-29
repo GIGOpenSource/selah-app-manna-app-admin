@@ -1,22 +1,24 @@
 <template>
-	<!-- 由页面 onShow/onHide 控制 v-if，避免 H5 custom-tab-bar 不渲染 / 子组件生命周期丢失 -->
+	<!-- 各 Tab 页各挂一份；全局 tabUi.key 同步选中高亮，切栏前先改 key -->
 	<view
+		v-show="show"
 		class="mtab"
-		:class="{ 'mtab--light': isLight }"
+		:class="{ 'mtab--light': isLight, 'mtab--with-mini': listenSession.mini }"
 		:style="{ paddingBottom: padBottom + 'px' }"
 	>
+		<ListenMiniBar v-if="listenSession.mini" />
 		<view class="mtab__bar">
 			<view
 				v-for="item in items"
 				:key="item.key"
 				class="mtab__item"
-				:class="{ 'is-on': active === item.key }"
+				:class="{ 'is-on': selectedKey === item.key }"
 				hover-class="mtab__item--press"
 				@click.stop="go(item)"
 			>
 				<image
 					class="mtab__ico"
-					:src="active === item.key ? item.iconOn : item.icon"
+					:src="selectedKey === item.key ? item.iconOn : item.icon"
 					mode="aspectFit"
 				/>
 			</view>
@@ -27,13 +29,24 @@
 <script setup>
 import { computed } from 'vue'
 import { getTabBarPaddingBottomPx } from '@/utils/safeArea.js'
+import { listenSession } from '@/utils/listenSession.js'
+import { openQuizPlayDirect } from '@/utils/quizAttempt.js'
+import { markUserTabNavigation } from '@/utils/coldStart.js'
+import { tabUi, setTabUiKey, tabVariantFor } from '@/utils/tabbar.js'
+import { t } from '@/i18n/index.js'
+import ListenMiniBar from '@/components/ListenMiniBar.vue'
 
 const props = defineProps({
 	active: { type: String, default: '' },
-	variant: { type: String, default: 'dark' },
+	variant: { type: String, default: '' },
+	/** 子页可强制隐藏；Tab 根页保持 true，切 Tab 不卸 */
+	show: { type: Boolean, default: true },
 })
 
-const isLight = computed(() => props.variant === 'light')
+const selectedKey = computed(() => tabUi.key || props.active || 'home')
+/** 主题跟本页 variant，不跟全局 key 变，避免切栏前玻璃条突然换色闪一下 */
+const resolvedVariant = computed(() => props.variant || tabVariantFor(props.active || selectedKey.value))
+const isLight = computed(() => resolvedVariant.value === 'light')
 const padBottom = computed(() => getTabBarPaddingBottomPx())
 
 const items = [
@@ -44,8 +57,30 @@ const items = [
 	{ path: '/pages/profile/profile', key: 'me', icon: '/static/ui/tab/me.svg', iconOn: '/static/ui/tab/me-on.svg' },
 ]
 
-function go(item) {
-	if (props.active === item.key) return
+async function go(item) {
+	if (selectedKey.value === item.key && props.active === item.key) return
+	markUserTabNavigation()
+	// 先改全局选中，再跳转：当前页底栏立刻切到目标高亮/由目标页接棒，减少空窗
+	setTabUiKey(item.key)
+	if (item.key === 'quiz') {
+		try {
+			const r = await openQuizPlayDirect()
+			if (r?.ok) return
+			if (r?.error?.message === 'locked') {
+				uni.showToast({ title: t('quiz_locked'), icon: 'none' })
+			} else if (r?.error?.message === 'no_level') {
+				uni.showToast({ title: t('quiz_empty'), icon: 'none' })
+			} else {
+				uni.showToast({ title: t('quiz_start_fail'), icon: 'none' })
+			}
+			// 开局失败：回到 quiz hub
+			uni.switchTab({ url: item.path })
+		} catch (e) {
+			uni.showToast({ title: e?.message || t('quiz_start_fail'), icon: 'none' })
+			uni.switchTab({ url: item.path })
+		}
+		return
+	}
 	uni.switchTab({ url: item.path })
 }
 </script>
@@ -60,11 +95,15 @@ function go(item) {
 	bottom: 0;
 	z-index: 1000;
 	display: flex;
-	justify-content: center;
+	flex-direction: column;
+	align-items: center;
+	justify-content: flex-end;
 	pointer-events: none;
 	padding-left: 40rpx;
 	padding-right: 40rpx;
 	box-sizing: border-box;
+	transform: translateZ(0);
+	backface-visibility: hidden;
 }
 
 .mtab__bar {

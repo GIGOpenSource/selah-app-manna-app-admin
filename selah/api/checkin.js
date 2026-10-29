@@ -28,3 +28,17 @@ export function apiReminderPrefsGet() {
 export function apiReminderPrefsSave(params) {
 	return postRequest('/checkin/reminder-prefs/', params || {})
 }
+
+/** 提醒闹钟时间 POST：{ key: writing|practice|quotes|checkin, hour, minute } */
+export function apiReminderTimesSave(params) {
+	return postRequest('/checkin/reminder-times/', {
+		key: String(params?.key || ''),
+		hour: Number(params?.hour),
+		minute: Number(params?.minute),
+	}, { showLoading: true })
+}
+
+/** 提醒闹钟时间列表 GET */
+export function apiReminderTimesGet() {
+	return getRequest('/checkin/reminder-times/', {}, { showLoading: false, errorOutput: false })
+}

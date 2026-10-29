@@ -1,30 +1,43 @@
 <!--
-  冷启 Welcome：对齐 Selah 流程（Continue → Login）。
-  文案/背景走 Welcome API（app_key×语言×设备）；本地图仅作缺图回落。
+  冷启 Welcome：文案/背景走 Welcome API。
+  接口未返回前只显示 loading，避免本地底图一闪再换成 CMS 图。
 -->
 <template>
 	<view class="welcome">
-		<view class="bg" aria-hidden="true">
-			<image class="bg-photo" :src="heroSrc" mode="aspectFill" />
-			<view class="bg-fade" />
+		<!-- 加载中：纯色底 + loading，不挂本地底图 -->
+		<view v-if="booting" class="boot">
+			<view class="boot__spin" />
+			<text class="boot__txt">{{ t('loading') }}</text>
 		</view>
 
-		<view class="copy">
-			<text class="title">{{ screen.title || t('brand') }}</text>
-			<text v-if="screen.subtitle" class="subtitle">{{ screen.subtitle }}</text>
-		</view>
+		<template v-else>
+			<view class="bg" aria-hidden="true">
+				<image
+					v-if="heroSrc"
+					class="bg-photo"
+					:src="heroSrc"
+					mode="aspectFill"
+				/>
+				<view class="bg-fade" />
+			</view>
 
-		<view class="footer">
-			<view class="cta" @click="continueNext">
-				<text class="cta-text">{{ screen.cta_text || t('continue') }}</text>
+			<view class="copy">
+				<text class="title">{{ screen.title || t('brand') }}</text>
+				<text v-if="screen.subtitle" class="subtitle">{{ screen.subtitle }}</text>
 			</view>
-			<view class="legal">
-				<text class="legal-plain">{{ t('welcome_legal_prefix') }}</text>
-				<text class="legal-link" @click.stop="openLegalPage('terms')">{{ t('legal_terms') }}</text>
-				<text class="legal-plain">{{ t('welcome_legal_mid') }}</text>
-				<text class="legal-link" @click.stop="openLegalPage('privacy')">{{ t('legal_privacy') }}</text>
+
+			<view class="footer">
+				<view class="cta" @click="continueNext">
+					<text class="cta-text">{{ screen.cta_text || t('continue') }}</text>
+				</view>
+				<view class="legal">
+					<text class="legal-plain">{{ t('welcome_legal_prefix') }}</text>
+					<text class="legal-link" @click.stop="openLegalPage('terms')">{{ t('legal_terms') }}</text>
+					<text class="legal-plain">{{ t('welcome_legal_mid') }}</text>
+					<text class="legal-link" @click.stop="openLegalPage('privacy')">{{ t('legal_privacy') }}</text>
+				</view>
 			</view>
-		</view>
+		</template>
 	</view>
 </template>
 
@@ -34,16 +47,19 @@ import { useI18n } from 'vue-i18n'
 import { apiWelcome } from '@/api/content.js'
 import { track } from '@/utils/analytics.js'
 import { openLegalPage } from '@/utils/openLegal.js'
-import { loadWithCache } from '@/utils/pageCache.js'
+import { readPageCache, writePageCache } from '@/utils/pageCache.js'
 import { WELCOME_CACHE_KEY } from '@/utils/wallpaperCache.js'
 import { WELCOME_SEEN_KEY } from '@/utils/coldStart.js'
 import { welcomeRevision } from '@/utils/bootstrap.js'
 import { ensureLocalAsset } from '@/utils/assetCache.js'
+import { absolutizeMedia } from '@/utils/media.js'
 
-/** 仅当运营未配图时回落 */
+/** 仅当接口与缓存都无图时回落（不会在 loading 阶段展示） */
 const LOCAL_HERO = '/static/ui/home/bg-279-364.png'
 
 const { t } = useI18n()
+/** 接口未完成前为 true，整页 loading */
+const booting = ref(true)
 const screen = ref({
 	title: '',
 	subtitle: '',
@@ -51,7 +67,12 @@ const screen = ref({
 	image_url: '',
 	version: 1,
 })
-const heroSrc = computed(() => (screen.value.image_url || LOCAL_HERO).trim() || LOCAL_HERO)
+
+const heroSrc = computed(() => {
+	const cms = String(screen.value.image_url || '').trim()
+	if (cms) return cms
+	return LOCAL_HERO
+})
 
 function markSeen() {
 	const ver = Number(screen.value.version || 1)
@@ -64,44 +85,116 @@ function continueNext() {
 	uni.reLaunch({ url: '/pagesA/login/login' })
 }
 
-async function applyWelcome(data) {
-	if (!data || !(data.title || data.subtitle || data.cta_text || data.image_url)) return
-	let imageUrl = (data.image_url || '').trim()
-	if (imageUrl && !imageUrl.startsWith('/static/')) {
-		imageUrl = await ensureLocalAsset(imageUrl)
-	}
-	screen.value = {
-		title: data.title || '',
-		subtitle: data.subtitle || '',
-		cta_text: data.cta_text || '',
-		image_url: imageUrl || '',
+/** 空 results / 无文案无图 → 视为未配置 */
+function normalizeWelcome(data) {
+	if (!data || typeof data !== 'object') return null
+	const title = String(data.title || '').trim()
+	const subtitle = String(data.subtitle || '').trim()
+	const cta_text = String(data.cta_text || '').trim()
+	const image_url = String(data.image_url || '').trim()
+	if (!title && !subtitle && !cta_text && !image_url) return null
+	return {
+		...data,
+		title,
+		subtitle,
+		cta_text,
+		image_url,
 		version: Number(data.version || 1),
 	}
 }
 
-async function load() {
+async function resolveImageUrl(raw) {
+	let imageUrl = String(raw || '').trim()
+	if (!imageUrl) return ''
+	if (imageUrl.startsWith('/static/')) return imageUrl
+	imageUrl = absolutizeMedia(imageUrl)
 	try {
-		await loadWithCache(
-			WELCOME_CACHE_KEY,
-			async () => {
-				const wRes = await apiWelcome().catch(() => null)
-				return wRes?.results || null
-			},
-			async (data) => { await applyWelcome(data) },
-			{ getRevision: welcomeRevision },
-		)
+		imageUrl = await ensureLocalAsset(imageUrl)
+	} catch (e) {}
+	return imageUrl || ''
+}
+
+/** 等底图可解码再揭幕，避免 loading 结束后再闪一次空白/旧图 */
+function waitImageReady(src, timeoutMs = 3500) {
+	const url = String(src || '').trim()
+	if (!url) return Promise.resolve()
+	return new Promise((resolve) => {
+		let done = false
+		const finish = () => {
+			if (done) return
+			done = true
+			clearTimeout(timer)
+			resolve()
+		}
+		const timer = setTimeout(finish, timeoutMs)
+		try {
+			uni.getImageInfo({
+				src: url,
+				success: finish,
+				fail: finish,
+			})
+		} catch (e) {
+			finish()
+		}
+	})
+}
+
+async function applyWelcome(data) {
+	const row = normalizeWelcome(data)
+	if (!row) return false
+	const imageUrl = await resolveImageUrl(row.image_url)
+	screen.value = {
+		title: row.title || '',
+		subtitle: row.subtitle || '',
+		cta_text: row.cta_text || '',
+		image_url: imageUrl || '',
+		version: row.version,
+	}
+	return true
+}
+
+function applyFallbackCopy() {
+	if (screen.value.title) return
+	screen.value = {
+		...screen.value,
+		title: t('brand'),
+		subtitle: screen.value.subtitle || t('welcome_fallback_sub'),
+		cta_text: screen.value.cta_text || t('continue'),
+	}
+}
+
+function persistIfChanged(fresh) {
+	if (!fresh) return
+	const cached = readPageCache(WELCOME_CACHE_KEY)
+	const a = welcomeRevision(cached)
+	const b = welcomeRevision(fresh)
+	if (a !== '' && b !== '' && String(a) === String(b)) return
+	writePageCache(WELCOME_CACHE_KEY, fresh)
+}
+
+async function load() {
+	booting.value = true
+	try {
+		// 先等接口；不把缓存/本地图提前画上，避免一闪
+		const wRes = await apiWelcome().catch(() => null)
+		const fresh = normalizeWelcome(wRes?.results)
+		if (fresh) {
+			persistIfChanged(fresh)
+			await applyWelcome(fresh)
+		} else {
+			const cached = normalizeWelcome(readPageCache(WELCOME_CACHE_KEY))
+			if (cached) await applyWelcome(cached)
+		}
 	} catch (e) {
 		console.warn('welcome load failed', e)
+		const cached = normalizeWelcome(readPageCache(WELCOME_CACHE_KEY))
+		if (cached) await applyWelcome(cached)
+	} finally {
+		applyFallbackCopy()
+		await waitImageReady(heroSrc.value)
+		booting.value = false
+		track('welcome_page_view', { version: Number(screen.value.version || 1) })
 	}
-	if (!screen.value.title) {
-		screen.value = {
-			...screen.value,
-			title: t('brand'),
-			subtitle: screen.value.subtitle || t('welcome_fallback_sub'),
-			cta_text: screen.value.cta_text || t('continue'),
-		}
-	}
-	track('welcome_page_view', { version: Number(screen.value.version || 1) })
 }
 
 onMounted(load)
@@ -118,10 +211,44 @@ onMounted(load)
 	background: $manna-peach;
 }
 
+.boot {
+	position: absolute;
+	inset: 0;
+	z-index: 3;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 24rpx;
+	background: $manna-peach;
+}
+
+.boot__spin {
+	width: 48rpx;
+	height: 48rpx;
+	border-radius: 50%;
+	border: 4rpx solid rgba(33, 33, 33, 0.12);
+	border-top-color: $manna-btn-text;
+	animation: welcome-spin 0.75s linear infinite;
+}
+
+.boot__txt {
+	font-family: $manna-font-body;
+	font-size: 28rpx;
+	color: rgba(33, 33, 33, 0.55);
+}
+
+@keyframes welcome-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
 .bg {
 	position: absolute;
 	inset: 0;
 	pointer-events: none;
+	background: $manna-peach;
 }
 .bg-photo {
 	position: absolute;

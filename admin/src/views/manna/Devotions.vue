@@ -13,7 +13,7 @@
         <el-button type="primary" :icon="CirclePlusFilled" @click="openSeries()">新建系列</el-button>
       </div>
     </div>
-    <el-table :data="seriesRows" v-loading="loading" highlight-current-row @current-change="onSelectSeries">
+    <el-table :data="seriesRows" v-loading="loading" row-key="id">
       <el-table-column label="封面" width="88">
         <template #default="{ row }">
           <el-image
@@ -28,30 +28,37 @@
         </template>
       </el-table-column>
       <el-table-column prop="title" label="标题" min-width="160" />
-      <el-table-column prop="subtitle" label="副标题" min-width="140" show-overflow-tooltip />
-      <el-table-column prop="session_count" label="课时" width="70" />
+      <el-table-column label="牧师介绍" min-width="160" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.pastor_bio || row.subtitle || '—' }}</template>
+      </el-table-column>
+      <el-table-column prop="pastor_name" label="牧师" width="120" show-overflow-tooltip />
+      <el-table-column label="课时" width="80">
+        <template #default="{ row }">
+          <el-button link type="primary" @click.stop="openSessions(row)">{{ row.session_count ?? 0 }}</el-button>
+        </template>
+      </el-table-column>
       <el-table-column prop="is_vip" label="VIP" width="70">
         <template #default="{ row }">{{ row.is_vip ? '是' : '否' }}</template>
       </el-table-column>
-      <el-table-column prop="app_key" label="App名" width="90">
-        <template #default="{ row }">{{ row.app_key || '全部' }}</template>
+      <el-table-column prop="app_key" label="App名" min-width="110" width="110">
+        <template #default="{ row }">{{ row.app_key || '空维' }}</template>
       </el-table-column>
-      <el-table-column prop="language" label="语言" width="90">
+      <el-table-column prop="language" label="语言" min-width="100" width="100">
         <template #default="{ row }">{{ row.language || '全部' }}</template>
       </el-table-column>
-      <el-table-column prop="platform" label="设备" width="90">
+      <el-table-column prop="platform" label="设备" min-width="100" width="100">
         <template #default="{ row }">{{ row.platform || '全部' }}</template>
       </el-table-column>
-      <el-table-column prop="enabled" label="启用" width="80">
+      <el-table-column prop="enabled" label="启用" min-width="90" width="90">
         <template #default="{ row }">
           <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '是' : '否' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="200">
+      <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" @click="openSeries(row)">编辑</el-button>
-          <el-button link type="primary" @click="selectAndLoadSessions(row)">课时</el-button>
-          <el-button link type="danger" @click="onDeleteSeries(row)">删除</el-button>
+          <el-button link type="primary" @click.stop="openSeries(row)">编辑</el-button>
+          <el-button link type="primary" @click.stop="openSessions(row)">课时</el-button>
+          <el-button link type="danger" @click.stop="onDeleteSeries(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -64,34 +71,79 @@
       @current-change="loadSeries"
     />
 
-    <div class="pro-toolbar" style="margin-top: 24px">
-      <div class="pro-toolbar-title">课时{{ activeSeries ? ` · ${activeSeries.title}` : '' }}</div>
-      <div class="pro-toolbar-actions">
-        <el-button type="primary" :disabled="!activeSeries" @click="openSession()">新建课时</el-button>
+    <el-dialog
+      v-model="sessionsVisible"
+      :title="activeSeries ? `课时 · ${activeSeries.title}` : '课时'"
+      width="880px"
+      destroy-on-close
+    >
+      <div class="pro-toolbar" style="margin-top: 0">
+        <div class="pro-toolbar-title">共 {{ sessionRows.length }} 节</div>
+        <div class="pro-toolbar-actions">
+          <el-button type="primary" @click="openSession()">新建课时</el-button>
+        </div>
       </div>
-    </div>
-    <el-table :data="sessionRows" v-loading="sessionLoading">
-      <el-table-column prop="title" label="标题" min-width="160" />
-      <el-table-column prop="scripture_ref" label="经文" width="140" />
-      <el-table-column prop="sort_order" label="排序" width="70" />
-      <el-table-column prop="duration_hint_sec" label="时长(s)" width="90" />
-      <el-table-column prop="enabled" label="启用" width="80">
-        <template #default="{ row }">
-          <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '是' : '否' }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="160">
-        <template #default="{ row }">
-          <el-button link type="primary" @click="openSession(row)">编辑</el-button>
-          <el-button link type="danger" @click="onDeleteSession(row.id)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+      <el-table :data="sessionRows" v-loading="sessionLoading" row-key="id">
+        <el-table-column prop="title" label="标题" min-width="140" />
+        <el-table-column prop="scripture_ref" label="经文出处" width="140" show-overflow-tooltip />
+        <el-table-column prop="scripture_text" label="经文" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="sort_order" label="排序" min-width="80" width="80" />
+        <el-table-column prop="duration_hint_sec" label="时长(s)" width="90" />
+        <el-table-column prop="enabled" label="启用" min-width="90" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '是' : '否' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="160">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openSession(row)">编辑</el-button>
+            <el-button link type="danger" @click="onDeleteSession(row.id)">删除</el-button>
+          </template>
+        </el-table-column>
+        <template #empty>暂无课时，点击「新建课时」添加</template>
+      </el-table>
+    </el-dialog>
 
     <el-dialog v-model="seriesVisible" :title="seriesForm.id ? '编辑系列' : '新建系列'" width="640px" destroy-on-close>
       <el-form label-width="100px">
         <el-form-item label="标题" required><el-input v-model="seriesForm.title" /></el-form-item>
-        <el-form-item label="副标题"><el-input v-model="seriesForm.subtitle" /></el-form-item>
+        <el-form-item label="牧师姓名"><el-input v-model="seriesForm.pastor_name" maxlength="128" placeholder="详情页作者简介" /></el-form-item>
+        <el-form-item label="牧师介绍">
+          <el-input v-model="seriesForm.pastor_bio" type="textarea" :rows="4" placeholder="牧师介绍" />
+        </el-form-item>
+        <el-form-item label="牧师头像">
+          <div class="cover-field">
+            <el-upload
+              class="avatar-uploader"
+              :show-file-list="false"
+              :auto-upload="false"
+              accept="image/*"
+              :on-change="onUploadAvatar"
+            >
+              <div v-if="seriesForm.pastor_avatar_url" class="avatar-preview">
+                <img :src="seriesForm.pastor_avatar_url" alt="pastor avatar" />
+                <div class="cover-preview__mask">点击更换</div>
+              </div>
+              <el-button v-else type="primary" plain :loading="uploading === 'avatar'">上传头像</el-button>
+            </el-upload>
+            <div class="cover-actions">
+              <el-button
+                v-if="seriesForm.pastor_avatar_url"
+                size="small"
+                :loading="uploading === 'avatar'"
+                @click="triggerFilePick('.avatar-uploader')"
+              >重新上传</el-button>
+              <el-button
+                v-if="seriesForm.pastor_avatar_url"
+                size="small"
+                type="danger"
+                plain
+                @click="seriesForm.pastor_avatar_url = ''"
+              >清除</el-button>
+            </div>
+            <p class="field-hint">上传牧师头像到 COS；可留空，App 详情页会回落用封面。</p>
+          </div>
+        </el-form-item>
         <el-form-item label="封面" required>
           <div class="cover-field">
             <el-upload
@@ -105,14 +157,14 @@
                 <img :src="seriesForm.cover_url" alt="cover" />
                 <div class="cover-preview__mask">点击更换</div>
               </div>
-              <el-button v-else type="primary" plain :loading="uploading">上传封面到 COS</el-button>
+              <el-button v-else type="primary" plain :loading="uploading === 'cover'">上传封面到 COS</el-button>
             </el-upload>
             <div class="cover-actions">
               <el-button
                 v-if="seriesForm.cover_url"
                 size="small"
-                :loading="uploading"
-                @click="triggerCoverPick"
+                :loading="uploading === 'cover'"
+                @click="triggerFilePick('.cover-uploader')"
               >重新上传</el-button>
               <el-button
                 v-if="seriesForm.cover_url"
@@ -134,12 +186,6 @@
           <el-input v-model="tagsText" placeholder="逗号分隔，如 Anxiety,Peace" />
         </el-form-item>
         <el-form-item label="VIP"><el-switch v-model="seriesForm.is_vip" /></el-form-item>
-        <el-form-item label="App">
-          <el-select v-model="seriesForm.app_key" filterable style="width: 100%">
-            <el-option label="全局（两 App 可见）" value="" />
-            <el-option v-for="a in APP_KEYS" :key="a" :label="a" :value="a" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="语言">
           <el-select v-model="seriesForm.language" style="width: 100%">
             <el-option label="全部" value="" />
@@ -161,10 +207,13 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="sessionVisible" :title="sessionForm.id ? '编辑课时' : '新建课时'" width="640px" destroy-on-close>
+    <el-dialog v-model="sessionVisible" :title="sessionForm.id ? '编辑课时' : '新建课时'" width="640px" append-to-body destroy-on-close>
       <el-form label-width="100px">
         <el-form-item label="标题"><el-input v-model="sessionForm.title" /></el-form-item>
-        <el-form-item label="经文出处"><el-input v-model="sessionForm.scripture_ref" /></el-form-item>
+        <el-form-item label="经文出处"><el-input v-model="sessionForm.scripture_ref" placeholder="如 John 3:16" /></el-form-item>
+        <el-form-item label="经文">
+          <el-input v-model="sessionForm.scripture_text" type="textarea" :rows="4" placeholder="经文" />
+        </el-form-item>
         <el-form-item label="正文"><el-input v-model="sessionForm.body" type="textarea" :rows="8" /></el-form-item>
         <el-form-item label="时长(s)"><el-input-number v-model="sessionForm.duration_hint_sec" :min="0" /></el-form-item>
         <el-form-item label="排序"><el-input-number v-model="sessionForm.sort_order" /></el-form-item>
@@ -187,8 +236,8 @@ import {
   uploadFile,
 } from '../../api'
 import ScopeFilter from '../../components/ScopeFilter.vue'
-import { browseScopeParams } from '../../utils/scopeParams'
-import { APP_KEYS, LANG_OPTIONS } from '../../utils/enumZh'
+import { browseScopeParams, defaultCreateAppKey } from '../../utils/scopeParams'
+import { LANG_OPTIONS } from '../../utils/enumZh'
 
 const appKey = ref('manna')
 const language = ref('')
@@ -197,11 +246,12 @@ const seriesRows = ref([])
 const seriesPage = ref(1)
 const seriesTotal = ref(0)
 const loading = ref(false)
-const uploading = ref(false)
+const uploading = ref('')
 const activeSeries = ref(null)
 const sessionRows = ref([])
 const sessionLoading = ref(false)
 const seriesVisible = ref(false)
+const sessionsVisible = ref(false)
 const seriesForm = ref({})
 const tagsText = ref('')
 const sessionVisible = ref(false)
@@ -210,6 +260,7 @@ const sessionForm = ref({})
 function onScopeChange() {
   activeSeries.value = null
   sessionRows.value = []
+  sessionsVisible.value = false
   loadSeries(1)
 }
 
@@ -235,62 +286,87 @@ async function loadSeries(p = seriesPage.value) {
   }
 }
 
-function onSelectSeries(row) {
-  if (row) selectAndLoadSessions(row)
-}
-
 async function selectAndLoadSessions(row) {
+  if (!row?.id) {
+    ElMessage.warning('该系列缺少 ID，无法加载课时')
+    return
+  }
   activeSeries.value = row
   sessionLoading.value = true
   try {
-    const res = await fetchDevotionSessions({ series_id: row.id, currentPage: 1, pageSize: 100 })
+    const res = await fetchDevotionSessions({
+      series_id: row.id,
+      currentPage: 1,
+      pageSize: 100,
+    })
     sessionRows.value = res.results || []
   } catch (e) {
+    sessionRows.value = []
     ElMessage.error(e.message || e.msg || '课时加载失败')
   } finally {
     sessionLoading.value = false
   }
 }
 
+async function openSessions(row) {
+  sessionsVisible.value = true
+  await selectAndLoadSessions(row)
+}
+
 function openSeries(row) {
-  seriesForm.value = row
-    ? { ...row }
-    : {
+  if (row) {
+    const next = { ...row }
+    next.pastor_bio = row.pastor_bio || row.subtitle || ''
+    delete next.subtitle
+    seriesForm.value = next
+  } else {
+    seriesForm.value = {
         title: '',
-        subtitle: '',
+        pastor_bio: '',
+        pastor_name: '',
+        pastor_avatar_url: '',
         cover_url: '',
         tags: [],
         is_vip: false,
         session_count: 0,
         sort_order: 0,
         enabled: true,
-        app_key: appKey.value || 'manna',
+        app_key: defaultCreateAppKey(),
         language: language.value || '',
         platform: platform.value || '',
       }
+  }
   tagsText.value = Array.isArray(seriesForm.value.tags) ? seriesForm.value.tags.join(',') : ''
   seriesVisible.value = true
 }
 
-async function onUploadCover(file) {
+async function uploadSeriesImage(file, slot, folder, field) {
   const raw = file?.raw
   if (!raw) return
-  uploading.value = true
+  uploading.value = slot
   try {
-    const res = await uploadFile(raw, 'manna/devotion')
+    const res = await uploadFile(raw, folder)
     const url = res.results?.url || res.data?.url || res?.url || ''
     if (!url) throw new Error('未返回 URL')
-    seriesForm.value.cover_url = url
-    ElMessage.success('封面已上传到 COS，请点保存写入数据库')
+    seriesForm.value[field] = url
+    ElMessage.success(slot === 'avatar' ? '头像已上传，请点保存' : '封面已上传到 COS，请点保存写入数据库')
   } catch (e) {
     ElMessage.error(e.message || e.msg || '上传失败')
   } finally {
-    uploading.value = false
+    uploading.value = ''
   }
 }
 
-function triggerCoverPick() {
-  const input = document.querySelector('.cover-uploader input[type="file"]')
+function onUploadCover(file) {
+  return uploadSeriesImage(file, 'cover', 'manna/devotion', 'cover_url')
+}
+
+function onUploadAvatar(file) {
+  return uploadSeriesImage(file, 'avatar', 'manna/devotion/avatar', 'pastor_avatar_url')
+}
+
+function triggerFilePick(selector) {
+  const input = document.querySelector(`${selector} input[type="file"]`)
   if (input) input.click()
 }
 
@@ -304,8 +380,11 @@ async function saveSeries() {
     return
   }
   seriesForm.value.tags = tagsText.value.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
+  const payload = { ...seriesForm.value, app_key: defaultCreateAppKey() }
+  payload.pastor_bio = String(payload.pastor_bio || '').trim()
+  delete payload.subtitle
   try {
-    await saveDevotionSeries(seriesForm.value)
+    await saveDevotionSeries(payload)
     ElMessage.success('已保存')
     seriesVisible.value = false
     loadSeries()
@@ -322,6 +401,7 @@ async function onDeleteSeries(row) {
     if (activeSeries.value?.id === row.id) {
       activeSeries.value = null
       sessionRows.value = []
+      sessionsVisible.value = false
     }
     loadSeries()
   } catch (e) {
@@ -331,13 +411,17 @@ async function onDeleteSeries(row) {
 }
 
 function openSession(row) {
-  if (!activeSeries.value) return
+  if (!activeSeries.value) {
+    ElMessage.warning('请先选择系列')
+    return
+  }
   sessionForm.value = row
-    ? { ...row }
+    ? { ...row, scripture_text: row.scripture_text || '' }
     : {
         series_id: activeSeries.value.id,
         title: '',
         scripture_ref: '',
+        scripture_text: '',
         body: '',
         sort_order: 0,
         duration_hint_sec: 300,
@@ -352,7 +436,10 @@ async function saveSession() {
     return
   }
   try {
-    await saveDevotionSession(sessionForm.value)
+    const payload = { ...sessionForm.value }
+    payload.scripture_text = String(payload.scripture_text || '').trim()
+    payload.scripture_ref = String(payload.scripture_ref || '').trim()
+    await saveDevotionSession(payload)
     ElMessage.success('已保存')
     sessionVisible.value = false
     await selectAndLoadSessions(activeSeries.value)
@@ -414,6 +501,24 @@ onMounted(loadSeries)
   transition: opacity 0.15s ease;
 }
 .cover-preview:hover .cover-preview__mask {
+  opacity: 1;
+}
+.avatar-preview {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid #ebeef5;
+  cursor: pointer;
+}
+.avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.avatar-preview:hover .cover-preview__mask {
   opacity: 1;
 }
 .cover-actions {

@@ -1,5 +1,6 @@
 <!--
-  提醒中心：对齐 Figma 136:24308（渐变卡 + 开关）；文案去竞品名。
+  提醒：清晨 / 正午 / 午后 / 夜晚。点时间或频次可改，开关即时保存。
+  进入页面若未开通知，先提示去系统设置；打不开设置时给出错误弹窗。
 -->
 <template>
 	<view class="page">
@@ -17,137 +18,277 @@
 
 		<text class="page-lead">{{ t('reminders_lead') }}</text>
 
-		<view :class="['rm-card', prefs.record_enabled ? 'on' : 'off']">
-			<view class="rm-top">
-				<text class="rm-title">{{ t('reminder_record') }}</text>
-				<text class="rm-time">{{ t('reminder_record_window') }}</text>
-			</view>
-			<view class="rm-bottom">
-				<text class="rm-meta">{{ t('reminder_record_meta') }}</text>
-				<switch
-					:checked="prefs.record_enabled"
-					@change="onToggle('record_enabled', $event)"
-					color="#191919"
-				/>
-			</view>
-		</view>
-
-		<view :class="['rm-card', prefs.checkin_remind_enabled ? 'on' : 'off']">
-			<view class="rm-top">
-				<text class="rm-title">{{ t('reminder_checkin') }}</text>
-				<text class="rm-time">{{ t('reminder_checkin_time') }}</text>
-			</view>
-			<view class="rm-bottom">
-				<text class="rm-meta">{{ t('reminder_checkin_meta') }}</text>
-				<switch
-					:checked="prefs.checkin_remind_enabled"
-					:disabled="!prefs.record_enabled"
-					@change="onToggle('checkin_remind_enabled', $event)"
-					color="#191919"
-				/>
-			</view>
-		</view>
-
-		<view :class="['rm-card', prefs.streak_remind_enabled ? 'on' : 'off']">
-			<view class="rm-top">
-				<text class="rm-title">{{ t('reminder_streak') }}</text>
-				<text class="rm-time">{{ t('reminder_streak_time') }}</text>
-			</view>
-			<view class="rm-bottom">
-				<text class="rm-meta">{{ t('reminder_streak_meta') }}</text>
-				<switch
-					:checked="prefs.streak_remind_enabled"
-					:disabled="!prefs.record_enabled"
-					@change="onToggle('streak_remind_enabled', $event)"
-					color="#191919"
-				/>
+		<view
+			v-for="slot in slots"
+			:key="slot.id"
+			:class="['rm-card', permOn ? 'on' : 'plain']"
+		>
+			<text class="rm-title">{{ t(`reminder_slot_${slot.id}`) }}</text>
+			<text class="rm-sub">{{ t(`reminder_slot_${slot.id}_body`) }}</text>
+			<view class="rm-foot">
+				<picker
+					mode="time"
+					:value="timeValue(slot)"
+					:disabled="saving"
+					@cancel="onEditorCancel"
+					@change="(e) => onTimeChange(slot, e)"
+				>
+					<view @tap="onEditTime">
+						<text class="rm-time">{{ timeLabelOf(slot) }}</text>
+					</view>
+				</picker>
+				<view class="rm-freq-row">
+					<view class="rm-freq" @tap.stop="onEditFrequency(slot)">
+						<text v-if="freqOf(slot) === 'weekdays'" class="rm-freq-count">{{ t('reminder_freq_weekdays') }}</text>
+						<template v-else>
+							<text class="rm-freq-count">{{ t('reminder_freq_count') }}</text>
+							<text class="rm-freq-when">{{ t('reminder_freq_when') }}</text>
+						</template>
+					</view>
+					<switch
+						:key="`${slot.id}-${permOn}-${enabledOf(slot)}-${switchEpoch}`"
+						class="rm-switch"
+						:checked="permOn && enabledOf(slot)"
+						:disabled="saving"
+						color="#191919"
+						@change="(e) => onToggle(slot, e)"
+					/>
+				</view>
 			</view>
 		</view>
 
-		<text class="hint">{{ t('reminders_hint') }}</text>
-
-		<view class="footer">
-			<view class="cta" @tap="onUnlock">
+		<!-- <view v-if="!vipOn" class="footer">
+			<view class="cta" @tap="onUnlockMore">
 				<text class="cta-text">{{ t('reminders_unlock') }}</text>
 			</view>
-		</view>
+		</view> -->
+
+		<text v-if="!permOn" class="perm-hint">{{ t('reminders_perm_footer') }}</text>
+
+		<selah-dialog
+			v-model:visible="permOpen"
+			:title="t('reminders_notif_off_title')"
+			:content="t('reminders_notif_off_body')"
+			:cancel-text="t('alarm_maybe_later')"
+			:confirm-text="t('reminders_notif_open')"
+			:close-on-mask="false"
+			@confirm="onOpenSettings"
+		/>
+		<selah-dialog
+			v-model:visible="permError"
+			:title="t('reminders_notif_error_title')"
+			:content="t('reminders_notif_error_body')"
+			:show-cancel="false"
+			:confirm-text="t('ok')"
+			:close-on-mask="false"
+		/>
 	</view>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow, onHide } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
-import { apiReminderPrefsGet, apiReminderPrefsSave } from '@/api/checkin.js'
-import { getUser, setUser } from '@/utils/session.js'
-import { applyReminderPrefsLocal, getLocalReminderPrefs } from '@/utils/reminder.js'
+import { apiPushRemindersGet, apiPushReminderSave } from '@/api/push.js'
+import {
+	REMINDER_SLOTS,
+	resolveDaypartPrefs,
+	applyDaypartPrefs,
+	isDaypartRemindersInited,
+	daypartPrefsFromPush,
+	refreshDaypartPushes,
+	formatRemindTime,
+} from '@/utils/reminder.js'
+import {
+	isNotificationAuthorized,
+	openAppNotificationSettings,
+} from '@/utils/alarm.js'
 import { safeBack } from '@/utils/nav.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
-import { track } from '@/utils/analytics.js'
-import { goVip } from '@/utils/vip.js'
+import { logFirebaseEvent } from '@/utils/firebase.js'
+import { goVip, isVipActive } from '@/utils/vip.js'
 
 const { t } = useI18n()
 const statusBarPx = getStatusBarPx()
-const loading = ref(false)
-const prefs = ref(getLocalReminderPrefs())
+const saving = ref(false)
+const prefs = ref(resolveDaypartPrefs(null))
 const fromProfile = ref(false)
+const permOn = ref(false)
+const permOpen = ref(false)
+const permError = ref(false)
+const vipOn = ref(false)
+const prompted = ref(false)
+const switchEpoch = ref(0)
+const slots = REMINDER_SLOTS
+let loadSeq = 0
 
 onLoad((q) => {
 	fromProfile.value = q?.from === 'profile'
 })
 
+onShow(() => {
+	vipOn.value = isVipActive()
+	permOn.value = isNotificationAuthorized()
+	if (permOn.value) {
+		permOpen.value = false
+		permError.value = false
+		if (isDaypartRemindersInited()) applyDaypartPrefs(prefs.value)
+		return
+	}
+	if (!prompted.value) {
+		prompted.value = true
+		permOpen.value = true
+	}
+})
+
+onHide(() => {
+	prompted.value = false
+})
+
 function goBack() {
+	const params = {}
+	slots.forEach((slot, i) => {
+		params[`reminder_${i + 1}`] = `${t(`reminder_slot_${slot.id}`)}/${timeLabelOf(slot)}/${freqOf(slot) === 'weekdays' ? t('reminder_freq_weekdays') : `${t('reminder_freq_count')}/${t('reminder_freq_when')}`}`
+	})
+	try { logFirebaseEvent('reminder_page_leave', params) } catch (e) {}
 	safeBack(fromProfile.value ? '/pages/profile/profile' : '/pagesA/settings/settings')
 }
 
-function onUnlock() {
+function enabledOf(slot) {
+	return !!prefs.value[`${slot.id}_enabled`]
+}
+
+function prefsFromRemote(remote) {
+	const next = { ...resolveDaypartPrefs(null) }
+	REMINDER_SLOTS.forEach((slot) => {
+		next[`${slot.id}_enabled`] = !!remote[`${slot.id}_enabled`]
+	})
+	return next
+}
+
+function timeValue(slot) {
+	const hour = prefs.value[`${slot.id}_hour`]
+	const minute = prefs.value[`${slot.id}_minute`]
+	const h = hour == null ? slot.hour : hour
+	const m = minute == null ? slot.minute : minute
+	return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+function timeLabelOf(slot) {
+	const hour = Number(prefs.value[`${slot.id}_hour`])
+	const minute = Number(prefs.value[`${slot.id}_minute`])
+	if (!Number.isFinite(hour) || !Number.isFinite(minute)) return slot.timeLabel
+	if (hour === slot.hour && minute === slot.minute) return slot.timeLabel
+	return formatRemindTime(hour, minute)
+}
+
+function freqOf(slot) {
+	return prefs.value[`${slot.id}_freq`] === 'weekdays' ? 'weekdays' : 'daily'
+}
+
+function onEditTime() {
+	try { logFirebaseEvent('reminder_edit_time_click') } catch (e) {}
+}
+
+function onTimeChange(slot, e) {
+	const parts = String(e?.detail?.value || '').split(':')
+	const hour = Number(parts[0])
+	const minute = Number(parts[1])
+	if (!Number.isFinite(hour) || !Number.isFinite(minute)) return
+	prefs.value = applyDaypartPrefs({
+		...prefs.value,
+		[`${slot.id}_hour`]: hour,
+		[`${slot.id}_minute`]: minute,
+	})
+	refreshDaypartPushes().catch(() => {})
+}
+
+function onEditFrequency(slot) {
+	try { logFirebaseEvent('reminder_edit_frequency_click') } catch (e) {}
+	uni.showActionSheet({
+		itemList: [t('reminder_freq_daily'), t('reminder_freq_weekdays')],
+		success: (res) => {
+			const freq = res.tapIndex === 1 ? 'weekdays' : 'daily'
+			prefs.value = applyDaypartPrefs({ ...prefs.value, [`${slot.id}_freq`]: freq })
+			refreshDaypartPushes().catch(() => {})
+		},
+		fail: () => {
+			try { logFirebaseEvent('reminder_editor_action_cancel') } catch (err) {}
+		},
+	})
+}
+
+function onEditorCancel() {
+	try { logFirebaseEvent('reminder_editor_action_cancel') } catch (e) {}
+}
+
+function onUnlockMore() {
+	try { logFirebaseEvent('reminder_unlockMore_click') } catch (e) {}
 	goVip('reminders')
 }
 
 async function load() {
-	loading.value = true
+	const seq = ++loadSeq
 	try {
-		const res = await apiReminderPrefsGet()
-		const data = res.results || {}
-		prefs.value = applyReminderPrefsLocal(data)
-		const u = getUser() || {}
-		Object.assign(u, {
-			checkin_record_enabled: prefs.value.record_enabled,
-			checkin_remind_enabled: prefs.value.checkin_remind_enabled,
-			reminder_prefs: prefs.value,
-		})
-		setUser(u)
+		const res = await apiPushRemindersGet()
+		if (seq !== loadSeq || saving.value) return
+		const remote = daypartPrefsFromPush(res)
+		if (remote) {
+			prefs.value = applyDaypartPrefs(prefsFromRemote(remote))
+			return
+		}
 	} catch (e) {
-		prefs.value = getLocalReminderPrefs()
+		if (seq !== loadSeq || saving.value) return
+	}
+	if (seq !== loadSeq || saving.value) return
+	prefs.value = applyDaypartPrefs(resolveDaypartPrefs(null))
+}
+
+async function onToggle(slot, e) {
+	const val = !!e.detail.value
+	try { logFirebaseEvent('reminder_toggle_click') } catch (e) {}
+	if (saving.value) {
+		switchEpoch.value += 1
+		return
+	}
+	if (!permOn.value) {
+		switchEpoch.value += 1
+		permOpen.value = true
+		return
+	}
+	loadSeq += 1
+	const prev = enabledOf(slot)
+	prefs.value = applyDaypartPrefs({ ...prefs.value, [`${slot.id}_enabled`]: val })
+	saving.value = true
+	try {
+		await apiPushReminderSave({ key: slot.id, enabled: val }, { loadingText: t('loading') })
+		try {
+			logFirebaseEvent('reminder_config_save_result', {
+				reminder_name: t(`reminder_slot_${slot.id}`),
+				time: slot.timeLabel,
+				frequency: `${t('reminder_freq_count')}/${t('reminder_freq_when')}`,
+			})
+		} catch (e) {}
+		refreshDaypartPushes().catch(() => {})
+	} catch (err) {
+		prefs.value = applyDaypartPrefs({ ...prefs.value, [`${slot.id}_enabled`]: prev })
+		switchEpoch.value += 1
+		try {
+			logFirebaseEvent('reminder_config_save_result', {
+				reminder_name: t(`reminder_slot_${slot.id}`),
+				time: slot.timeLabel,
+				frequency: `${t('reminder_freq_count')}/${t('reminder_freq_when')}`,
+			})
+		} catch (e) {}
+		uni.showToast({ title: t('request_failed'), icon: 'none' })
 	} finally {
-		loading.value = false
+		saving.value = false
 	}
 }
 
-async function onToggle(key, e) {
-	const val = !!e.detail.value
-	const next = { ...prefs.value, [key]: val }
-	if (key === 'record_enabled' && !val) {
-		next.streak_remind_enabled = false
-		next.checkin_remind_enabled = false
-	}
-	prefs.value = next
-	try {
-		const res = await apiReminderPrefsSave(next)
-		const data = res.results || next
-		prefs.value = applyReminderPrefsLocal(data)
-		const u = getUser() || {}
-		Object.assign(u, {
-			checkin_record_enabled: prefs.value.record_enabled,
-			checkin_remind_enabled: prefs.value.checkin_remind_enabled,
-			reminder_prefs: prefs.value,
-		})
-		setUser(u)
-		track('reminder_pref_change', { ...prefs.value })
-	} catch (err) {
-		await load()
-		uni.showToast({ title: t('request_failed'), icon: 'none' })
-	}
+function onOpenSettings() {
+	const opened = openAppNotificationSettings({ silent: true })
+	if (!opened) permError.value = true
 }
 
 onMounted(load)
@@ -158,7 +299,7 @@ onMounted(load)
 
 .page {
 	min-height: 100vh;
-	padding: 0 32rpx 180rpx;
+	padding: 0 32rpx calc(48rpx + env(safe-area-inset-bottom));
 	background: $selah-bg-gray;
 	color: $selah-ink;
 	box-sizing: border-box;
@@ -181,7 +322,9 @@ onMounted(load)
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	gap: 20rpx;
+}
+.nav-left .nav-title {
+	margin-left: 20rpx;
 }
 .nav-pill {
 	@include selah-nav-circle;
@@ -196,67 +339,77 @@ onMounted(load)
 }
 .page-lead {
 	display: block;
-	margin: 24rpx 0 28rpx;
-	font-size: 36rpx;
-	line-height: 1.35;
+	margin: 8rpx 8rpx 28rpx;
+	font-size: 32rpx;
+	line-height: 1.4;
 	color: $selah-ink;
 }
 .rm-card {
+	display: flex;
+	flex-direction: column;
 	border-radius: $selah-radius-card;
-	padding: 32rpx 24rpx;
+	padding: 32rpx 28rpx 56rpx;
 	margin-bottom: 24rpx;
 	box-sizing: border-box;
 }
 .rm-card.on {
-	background: linear-gradient(180deg, $selah-grad-top 0%, #ffffff 100%);
+	background: linear-gradient(180deg, $selah-grad-top 0%, #ffffff 72%);
 }
-.rm-card.off {
-	background: $selah-card;
-	opacity: 0.55;
-}
-.rm-top {
-	display: flex;
-	flex-direction: row;
-	justify-content: space-between;
-	align-items: baseline;
-	gap: 16rpx;
+.rm-card.plain {
+	background: #ffffff;
 }
 .rm-title {
 	@include selah-display-title;
 	font-size: 40rpx;
+	line-height: 1.2;
 }
-.rm-time {
-	font-size: 28rpx;
-	color: $selah-ink;
-	flex-shrink: 0;
-}
-.rm-bottom {
-	margin-top: 24rpx;
-	display: flex;
-	flex-direction: row;
-	justify-content: space-between;
-	align-items: center;
-}
-.rm-meta {
-	font-size: 28rpx;
-	color: $selah-ink;
-	opacity: 0.65;
-}
-.hint {
+.rm-sub {
 	display: block;
 	margin-top: 8rpx;
-	padding: 0 8rpx;
-	font-size: 24rpx;
+	font-size: 28rpx;
+	line-height: 1.35;
+	color: $selah-ink-soft;
+}
+.rm-foot {
+	display: flex;
+	flex-direction: column;
+	margin-top: 20rpx;
+	padding-top: 28rpx;
+	border-top: 2rpx dashed rgba(25, 25, 25, 0.22);
+}
+.rm-time {
+	display: block;
+	font-size: 28rpx;
+	line-height: 1;
+	color: $selah-ink;
+	margin-bottom: 28rpx;
+}
+.rm-freq-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	height: 28rpx;
+}
+.rm-freq {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	font-size: 28rpx;
+	line-height: 1;
+	color: $selah-ink;
+}
+.rm-freq-when {
+	margin-left: 10rpx;
 	color: $selah-muted;
-	line-height: 1.5;
+}
+.rm-switch {
+	flex-shrink: 0;
+	margin-left: 16rpx;
 }
 .footer {
-	position: fixed;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
-	background: linear-gradient(180deg, rgba(245, 245, 245, 0) 0%, $selah-bg-gray 28%);
+	margin-top: 12rpx;
 }
 .cta {
 	height: 96rpx;
@@ -270,5 +423,14 @@ onMounted(load)
 	color: #fff;
 	font-size: 32rpx;
 	font-weight: 600;
+}
+.perm-hint {
+	display: block;
+	margin-top: 8rpx;
+	padding: 0 12rpx;
+	font-size: 24rpx;
+	line-height: 1.45;
+	color: $selah-muted;
+	text-align: center;
 }
 </style>

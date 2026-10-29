@@ -23,9 +23,16 @@
           <el-option label="正常" :value="1" />
           <el-option label="禁用" :value="0" />
         </el-select>
-        <el-select v-model="vipLevel" clearable placeholder="会员" style="width: 120px" @change="load(1)">
+        <el-select v-if="!isManna" v-model="vipLevel" clearable placeholder="会员" style="width: 120px" @change="load(1)">
           <el-option v-for="(zh, val) in VIP_LEVEL_ZH" :key="val" :label="zh" :value="val" />
         </el-select>
+        <el-select v-model="skipped" clearable placeholder="是否跳过" style="width: 120px" @change="load(1)">
+          <el-option label="已跳过" value="1" />
+          <el-option label="未跳过" value="0" />
+        </el-select>
+        <el-input v-model="faithType" clearable placeholder="信仰" style="width: 120px" @keyup.enter="load(1)" />
+        <el-input v-model="prayerFreq" clearable placeholder="祷告频率" style="width: 120px" @keyup.enter="load(1)" />
+        <el-input v-model="interestTag" clearable placeholder="兴趣标签" style="width: 120px" @keyup.enter="load(1)" />
         <el-select
           v-model="country"
           clearable
@@ -58,26 +65,38 @@
         <el-table-column label="登录" width="100">
           <template #default="{ row }">{{ labelZh(LOGIN_TYPE_ZH, row.login_type) }}</template>
         </el-table-column>
-        <el-table-column label="会员" width="120">
+        <el-table-column v-if="!isManna" label="会员" width="120">
           <template #default="{ row }">
             <el-tag :type="row.vip_level === 'free' ? 'info' : 'warning'" size="small">
               {{ labelZh(VIP_LEVEL_ZH, row.vip_level) }}{{ row.is_trial ? '（试用）' : '' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="free_quota" label="Free额度" width="96" />
+        <el-table-column v-if="!isManna" prop="free_quota" label="Free额度" width="96" />
         <el-table-column prop="register_country" label="国家" width="72" />
-        <el-table-column prop="app_key" label="App" width="88">
+        <el-table-column prop="app_key" label="App" min-width="110" width="110">
           <template #default="{ row }">{{ row.app_key || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="system_lang" label="语言" width="72" />
-        <el-table-column prop="platform" label="设备" width="88">
+        <el-table-column prop="system_lang" label="语言" min-width="90" width="90" />
+        <el-table-column prop="platform" label="设备" min-width="100" width="100">
           <template #default="{ row }">{{ row.platform || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="跳过" width="72">
+          <template #default="{ row }">{{ row.onboarding_skipped ? '是' : '否' }}</template>
+        </el-table-column>
+        <el-table-column prop="faith_type" label="信仰" width="100">
+          <template #default="{ row }">{{ row.faith_type || '—' }}</template>
+        </el-table-column>
+        <el-table-column prop="prayer_frequency" label="祷告" width="100">
+          <template #default="{ row }">{{ row.prayer_frequency || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="兴趣" width="160">
+          <template #default="{ row }">{{ formatInterestTags(row.interest_tags) }}</template>
         </el-table-column>
         <el-table-column label="图标" width="120">
           <template #default="{ row }">{{ row.selected_icon_key || '—' }}</template>
         </el-table-column>
-        <el-table-column label="Prefs" width="96">
+        <el-table-column v-if="!isManna" label="Prefs" width="96">
           <template #default="{ row }">{{ prefsLabel(row) }}</template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="80">
@@ -124,17 +143,17 @@
             <el-radio :value="0">禁用</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="会员等级">
+        <el-form-item v-if="!isManna" label="会员等级">
           <el-select v-model="form.vip_level" style="width: 100%">
             <el-option label="Free" value="free" />
             <el-option label="VIP" value="vip" />
             <el-option label="Plus VIP" value="plus_vip" />
           </el-select>
         </el-form-item>
-        <el-form-item label="试用">
+        <el-form-item v-if="!isManna" label="试用">
           <el-switch v-model="form.is_trial" />
         </el-form-item>
-        <el-form-item label="VIP 到期">
+        <el-form-item v-if="!isManna" label="VIP 到期">
           <el-date-picker
             v-model="form.vip_expire_at"
             type="datetime"
@@ -143,10 +162,10 @@
             style="width: 100%"
           />
         </el-form-item>
-        <el-form-item label="Free 额度">
+        <el-form-item v-if="!isManna" label="Free 额度">
           <el-input-number v-model="form.free_quota" :min="0" />
         </el-form-item>
-        <el-form-item label="VIP 日剩余">
+        <el-form-item v-if="!isManna" label="VIP 日剩余">
           <el-input-number v-model="form.vip_daily_remaining" :min="0" />
         </el-form-item>
         <el-form-item label="营销订阅">
@@ -164,6 +183,26 @@
             :model-value="jsonPretty(form.profile_answers)"
           />
         </el-form-item>
+        <el-form-item label="是否跳过引导">
+          <span>{{ form.onboarding_skipped ? '是' : '否' }}</span>
+        </el-form-item>
+        <el-form-item label="信仰 / 祷告">
+          <span>{{ form.faith_type || '—' }} / {{ form.prayer_frequency || '—' }}</span>
+        </el-form-item>
+        <el-form-item label="兴趣标签">
+          <span>{{ formatInterestTags(form.interest_tags) }}</span>
+        </el-form-item>
+        <el-form-item label="用户侧标签">
+          <el-input
+            type="textarea"
+            :rows="5"
+            readonly
+            :model-value="jsonPretty(form.user_tags)"
+          />
+        </el-form-item>
+        <el-form-item label="当前命中策略">
+          <span>{{ form.hit_strategy_label || '—' }}</span>
+        </el-form-item>
         <el-form-item label="提醒偏好">
           <el-input
             type="textarea"
@@ -172,7 +211,7 @@
             :model-value="jsonPretty(form.reminder_prefs)"
           />
         </el-form-item>
-        <el-form-item label="小组件偏好">
+        <el-form-item v-if="!isManna" label="小组件偏好">
           <el-input
             type="textarea"
             :rows="5"
@@ -180,7 +219,7 @@
             :model-value="jsonPretty(form.widget_prefs)"
           />
         </el-form-item>
-        <el-form-item label="祷告闹钟">
+        <el-form-item v-if="!isManna" label="祷告闹钟">
           <el-input
             type="textarea"
             :rows="3"
@@ -188,7 +227,7 @@
             :model-value="jsonPretty(form.alarm_prefs)"
           />
         </el-form-item>
-        <el-form-item label="祷告锁">
+        <el-form-item v-if="!isManna" label="祷告锁">
           <el-input
             type="textarea"
             :rows="4"
@@ -209,13 +248,13 @@
 /**
  * App 用户管理：筛选 VIP/状态/国家；详情可改额度、会员到期、营销开关。
  */
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { fetchAppUsers, fetchAppUserDetail, saveAppUser, toggleAppUserStatus } from '../api'
 import ScopeFilter from '../components/ScopeFilter.vue'
 import { browseScopeParams } from '../utils/scopeParams'
-import { labelZh, LOGIN_TYPE_ZH, VIP_LEVEL_ZH, COUNTRY_OPTIONS } from '../utils/enumZh'  
+import { labelZh, LOGIN_TYPE_ZH, VIP_LEVEL_ZH, COUNTRY_OPTIONS, THEME_TAG_ZH } from '../utils/enumZh'  
 
 const router = useRouter()
 
@@ -233,6 +272,19 @@ const country = ref('')
 const appKey = ref('')
 const systemLang = ref('')
 const platform = ref('')
+const skipped = ref(null)
+const faithType = ref('')
+const prayerFreq = ref('')
+const interestTag = ref('')
+
+/** Manna 后台隐藏会员/额度相关（筛选+列表+编辑弹窗）；Selah 不受影响 */
+const isManna = computed(() => appKey.value === 'manna')
+
+function formatInterestTags(tags) {
+  const list = tags || []
+  if (!list.length) return '—'
+  return list.map((t) => THEME_TAG_ZH[t] ? `${THEME_TAG_ZH[t]} (${t})` : t).join('、')
+}
 
 /** 分页查询 App 用户列表 */
 async function load(p = page.value) {
@@ -254,8 +306,12 @@ async function load(p = page.value) {
     }
     if (q.value) params.q = q.value
     if (status.value === 0 || status.value === 1) params.status = status.value
-    if (vipLevel.value) params.vip_level = vipLevel.value
+    if (vipLevel.value && !isManna.value) params.vip_level = vipLevel.value
     if (country.value) params.register_country = country.value
+    if (skipped.value === '0' || skipped.value === '1') params.onboarding_skipped = skipped.value
+    if (faithType.value) params.faith_type = faithType.value
+    if (prayerFreq.value) params.prayer_frequency = prayerFreq.value
+    if (interestTag.value) params.interest_tag = interestTag.value
     const res = await fetchAppUsers(params)
     rows.value = res.results || []
     total.value = res.pagination?.total || rows.value.length
@@ -275,6 +331,10 @@ function onReset() {
   appKey.value = ''
   systemLang.value = ''
   platform.value = ''
+  skipped.value = null
+  faithType.value = ''
+  prayerFreq.value = ''
+  interestTag.value = ''
   load(1)
 }
 
@@ -294,21 +354,24 @@ async function openEdit(row) {
   }
 }
 
-/** 保存运营可改字段（展示名、状态、VIP、额度等） */
+/** 保存运营可改字段；Manna 下不提交会员/额度字段 */
 async function save() {
   saving.value = true
   try {
-    await saveAppUser({
+    const payload = {
       id: form.value.id,
       display_name: form.value.display_name,
       status: form.value.status,
-      vip_level: form.value.vip_level,
-      is_trial: form.value.is_trial,
-      vip_expire_at: form.value.vip_expire_at || null,
-      free_quota: form.value.free_quota,
-      vip_daily_remaining: form.value.vip_daily_remaining,
       marketing_opt_in: form.value.marketing_opt_in,
-    })
+    }
+    if (!isManna.value) {
+      payload.vip_level = form.value.vip_level
+      payload.is_trial = form.value.is_trial
+      payload.vip_expire_at = form.value.vip_expire_at || null
+      payload.free_quota = form.value.free_quota
+      payload.vip_daily_remaining = form.value.vip_daily_remaining
+    }
+    await saveAppUser(payload)
     ElMessage.success('已保存')
     visible.value = false
     load()

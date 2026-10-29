@@ -1,34 +1,66 @@
 {
 	"pages": [
 		{
+			"path": "pages/boot/boot",
+			"style": {
+				"navigationStyle": "custom",
+				"disableScroll": true,
+				"backgroundColor": "#fff4ee",
+				"backgroundColorTop": "#fff4ee",
+				"backgroundColorBottom": "#fff4ee",
+				"app-plus": { "bounce": "none" }
+			}
+		},
+		{
 			"path": "pages/home/home",
 			"style": {
-				"navigationStyle": "custom"
+				"navigationStyle": "custom",
+				"backgroundColor": "#0a0a0a",
+				"backgroundColorTop": "#0a0a0a",
+				"backgroundColorBottom": "#0a0a0a",
+				"app-plus": { "bounce": "none" }
 			}
 		},
 		{
 			"path": "pages/quiz/quiz",
 			"style": {
-				"navigationStyle": "custom"
+				"navigationStyle": "custom",
+				"backgroundColor": "#0a0a0a",
+				"backgroundColorTop": "#0a0a0a",
+				"backgroundColorBottom": "#0a0a0a",
+				"app-plus": { "bounce": "none" }
 			}
 		},
 		{
 			"path": "pages/devotion/list",
 			"style": {
 				"navigationStyle": "custom",
-				"disableScroll": true
+				"backgroundColor": "#fff4ee",
+				"backgroundColorTop": "#fff4ee",
+				"backgroundColorBottom": "#fff4ee",
+				"app-plus": {
+					"bounce": "none"
+				}
 			}
 		},
 		{
 			"path": "pages/bible/bible",
 			"style": {
-				"navigationStyle": "custom"
+				"navigationStyle": "custom",
+				"backgroundColor": "#fff4ee",
+				"backgroundColorTop": "#fff4ee",
+				"backgroundColorBottom": "#fff4ee",
+				"app-plus": { "bounce": "none" }
 			}
 		},
 		{
 			"path": "pages/profile/profile",
 			"style": {
-				"navigationStyle": "custom"
+				"navigationStyle": "custom",
+				"backgroundColor": "#fff4ee",
+				"backgroundColorTop": "#fff4ee",
+				"backgroundColorBottom": "#fff4ee",
+				"app-plus": { "bounce": "none" }
 			}
 		}
 	],
@@ -38,22 +70,31 @@
 			"pages": [
 				{ "path": "welcome/welcome", "style": { "navigationStyle": "custom" } },
 				{ "path": "login/login", "style": { "navigationStyle": "custom" } },
+				{ "path": "onboarding/onboarding", "style": { "navigationStyle": "custom", "backgroundColor": "#fff4ee", "backgroundColorTop": "#fff4ee", "backgroundColorBottom": "#fff4ee", "app-plus": { "bounce": "none" } } },
 				{ "path": "legal/legal", "style": { "navigationStyle": "custom" } },
 				{ "path": "settings/settings", "style": { "navigationStyle": "custom" } },
+				{ "path": "settings/account", "style": { "navigationStyle": "custom" } },
+				{ "path": "settings/muted", "style": { "navigationStyle": "custom" } },
 				{ "path": "devotion/detail", "style": { "navigationStyle": "custom" } },
-				{ "path": "devotion/session", "style": { "navigationStyle": "custom" } },
+				{ "path": "devotion/session", "style": { "navigationStyle": "custom", "backgroundColor": "#ffffff", "backgroundColorTop": "#ffffff", "backgroundColorBottom": "#ffffff" } },
+				{ "path": "devotion/result", "style": { "navigationStyle": "custom", "backgroundColor": "#21120e", "backgroundColorTop": "#21120e", "backgroundColorBottom": "#21120e", "app-plus": { "bounce": "none" } } },
 				{ "path": "quiz/play", "style": { "navigationStyle": "custom" } },
-				{ "path": "quiz/result", "style": { "navigationStyle": "custom" } },
+				{ "path": "quiz/result", "style": { "navigationStyle": "custom", "backgroundColor": "#21120e", "backgroundColorTop": "#21120e", "backgroundColorBottom": "#21120e", "app-plus": { "bounce": "none" } } },
 				{ "path": "quiz/stories", "style": { "navigationStyle": "custom" } },
-				{ "path": "quiz/story-unlock", "style": { "navigationStyle": "custom" } },
 				{ "path": "quiz/story-learn", "style": { "navigationStyle": "custom" } },
+				{ "path": "quiz/story-read", "style": { "navigationStyle": "custom", "backgroundColor": "#ffffff", "backgroundColorTop": "#ffffff", "backgroundColorBottom": "#ffffff" } },
 				{ "path": "quiz/story-done", "style": { "navigationStyle": "custom" } },
 				{ "path": "quiz/in-bible", "style": { "navigationStyle": "custom" } },
-				{ "path": "bible/listen", "style": { "navigationStyle": "custom" } },
-				{ "path": "prayer/prayer", "style": { "navigationStyle": "custom" } },
+				{ "path": "bible/listen", "style": { "navigationStyle": "custom", "backgroundColor": "#0a0a0a", "backgroundColorTop": "#0a0a0a", "backgroundColorBottom": "#0a0a0a", "app-plus": { "bounce": "none" } } },
+				{ "path": "prayer/prayer", "style": { "navigationStyle": "custom", "backgroundColor": "#0a0a0a", "backgroundColorTop": "#0a0a0a", "backgroundColorBottom": "#0a0a0a", "app-plus": { "bounce": "none" } } },
+				{ "path": "prayer/result", "style": { "navigationStyle": "custom", "backgroundColor": "#0a0a0a", "backgroundColorTop": "#0a0a0a", "backgroundColorBottom": "#0a0a0a", "app-plus": { "bounce": "none" } } },
+				{ "path": "quiz/review", "style": { "navigationStyle": "custom" } },
 				{ "path": "profile/collections", "style": { "navigationStyle": "custom" } },
 				{ "path": "profile/badges", "style": { "navigationStyle": "custom" } },
 				{ "path": "profile/ledger", "style": { "navigationStyle": "custom" } },
+				{ "path": "profile/bible-hub", "style": { "navigationStyle": "custom" } },
+				{ "path": "profile/notes", "style": { "navigationStyle": "custom" } },
+				{ "path": "profile/highlights", "style": { "navigationStyle": "custom" } },
 				{ "path": "share/versecard", "style": { "navigationStyle": "custom" } },
 				{ "path": "calendar/calendar", "style": { "navigationStyle": "custom" } },
 				{ "path": "vip/vip", "style": { "navigationStyle": "custom" } },
@@ -66,46 +107,59 @@
 		"selectedColor": "#ffffff",
 		"borderStyle": "black",
 		"backgroundColor": "#000000",
-		"custom": false,
+		"custom": true,
 		"list": [
 			{
 				"pagePath": "pages/home/home",
-				"text": "Home",
+				"text": "",
 				"iconPath": "static/tab/home.png",
 				"selectedIconPath": "static/tab/home-active.png"
 			},
 			{
 				"pagePath": "pages/quiz/quiz",
-				"text": "Quiz",
+				"text": "",
 				"iconPath": "static/tab/quiz.png",
 				"selectedIconPath": "static/tab/quiz-active.png"
 			},
 			{
 				"pagePath": "pages/devotion/list",
-				"text": "Devotion",
+				"text": "",
 				"iconPath": "static/tab/devotion.png",
 				"selectedIconPath": "static/tab/devotion-active.png"
 			},
 			{
 				"pagePath": "pages/bible/bible",
-				"text": "Bible",
+				"text": "",
 				"iconPath": "static/tab/bible.png",
 				"selectedIconPath": "static/tab/bible-active.png"
 			},
 			{
 				"pagePath": "pages/profile/profile",
-				"text": "Me",
+				"text": "",
 				"iconPath": "static/tab/me.png",
 				"selectedIconPath": "static/tab/me-active.png"
 			}
 		]
 	},
 	"globalStyle": {
-		"navigationBarTextStyle": "white",
+		"navigationBarTextStyle": "black",
 		"navigationBarTitleText": "Manna",
-		"navigationBarBackgroundColor": "#0a0a0a",
-		"backgroundColor": "#0a0a0a",
-		"backgroundTextStyle": "light"
+		"navigationBarBackgroundColor": "#fff4ee",
+		"backgroundColor": "#fff4ee",
+		"backgroundColorTop": "#fff4ee",
+		"backgroundColorBottom": "#fff4ee",
+		"backgroundTextStyle": "dark",
+		"app-plus": {
+			"bounce": "none",
+			"background": "#fff4ee",
+			"scrollIndicator": "none",
+			"safearea": {
+				"background": "#fff4ee",
+				"bottom": {
+					"offset": "none"
+				}
+			}
+		}
 	},
 	"easycom": {
 		"autoscan": true,

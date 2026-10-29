@@ -20,7 +20,9 @@
 		<view
 			v-for="q in list"
 			:key="q.id"
-			class="card"
+			:id="'expo-' + q.id"
+			:data-xid="q.id"
+			class="card expo-quiz"
 			@tap="onStart(q)"
 		>
 			<image
@@ -46,14 +48,12 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { t } from '@/i18n/index.js'
 import { apiQuizList, apiQuizStart } from '@/api/content.js'
 import { safeBack } from '@/utils/nav.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
 import { goVip } from '@/utils/vip.js'
-import { track } from '@/utils/analytics.js'
 
-const { t } = useI18n()
 const statusBarPx = getStatusBarPx()
 const list = ref([])
 const loading = ref(true)
@@ -82,7 +82,6 @@ async function onStart(q) {
 		return
 	}
 	starting.value = true
-	track('quiz_start', { quiz_id: q.id, scene: 'list' })
 	try {
 		const res = await apiQuizStart(q.id)
 		const data = res.results || {}

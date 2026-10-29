@@ -2,14 +2,14 @@
 
 Vue 3 + Vite + Pinia + Element Plus 的 Web 运营台，对接后端 `/api/admin-ops/`。
 
-本地开发见仓库根 [`README.md`](../../../README.md) 与 [`SELAH_DEV.md`](../../SELAH_DEV.md)。
+本地开发见仓库根 [`README.md`](../../README.md) 与 [`SELAH_DEV.md`](../../SELAH_DEV.md)。
 
 ---
 
 ## 快速启动
 
 ```bash
-cd fast_base/frontend/admin
+cd frontend/admin
 npm install
 npm run dev
 # http://localhost:5173  （vite 代理 /api → 后端 8000）
@@ -83,7 +83,7 @@ admin/
 | `ColdStart.vue` | 冷启池 + 70/30 比例配置 |
 | `Topics.vue` / `Wallpapers.vue` | 主题 / 壁纸 |
 | `ContentReports.vue` | 内容举报处理 |
-| `AiProvider.vue` | AI 模型与系统 Prompt |
+| `AiProvider.vue` | AI 模型、系统 Prompt、API Base/Key |
 | `Rewards.vue` | 签到爱心 / 新人额度 / Free 上限 |
 | `Configs.vue` | 其余键值配置 |
 | `Onboarding.vue` | 引导题 |

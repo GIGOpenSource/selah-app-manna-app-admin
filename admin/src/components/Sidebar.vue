@@ -5,8 +5,10 @@
   <div class="sidebar">
     <el-menu
       class="sidebar-el-menu"
+      :key="`${currentAppKey}-${sidebar.collapse ? 'c' : 'e'}`"
       :default-active="onRoutes"
       :collapse="sidebar.collapse"
+      :collapse-transition="false"
       :background-color="sidebar.bgColor"
       :text-color="sidebar.textColor"
       :active-text-color="sidebar.activeTextColor"
@@ -40,13 +42,17 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useSidebarStore } from '../store/sidebar'
 import { useAuthStore } from '../store/auth'
-import { menuData, filterMenuByPerms } from './menu'
+import { menuData, mannaMenuData, filterMenuByPerms } from './menu'
+import { currentAppKey } from '../utils/productContext'
+import { SIDEBAR_ACTIVE_ALIAS } from '../utils/moduleTabs'
 
 const route = useRoute()
 const sidebar = useSidebarStore()
 const auth = useAuthStore()
-const onRoutes = computed(() => route.path)
-const menus = computed(() => filterMenuByPerms(menuData, auth.permissions))
+const onRoutes = computed(() => SIDEBAR_ACTIVE_ALIAS[route.path] || route.path)
+const menus = computed(() =>
+  filterMenuByPerms(currentAppKey.value === 'manna' ? mannaMenuData : menuData, auth.permissions),
+)
 </script>
 
 <style scoped>
@@ -57,6 +63,7 @@ const menus = computed(() => filterMenuByPerms(menuData, auth.permissions))
   top: var(--pro-header-height);
   bottom: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   background: var(--pro-sider-bg);
   box-shadow: 2px 0 8px 0 rgba(29, 35, 41, 0.05);
 }
@@ -65,13 +72,13 @@ const menus = computed(() => filterMenuByPerms(menuData, auth.permissions))
   width: 0;
 }
 
-.sidebar-el-menu:not(.el-menu--collapse) {
-  width: 208px;
-}
-
 .sidebar-el-menu {
   min-height: 100%;
   border-right: none !important;
+}
+
+.sidebar-el-menu:not(.el-menu--collapse) {
+  width: 208px;
 }
 
 .sidebar-el-menu :deep(.el-menu-item),

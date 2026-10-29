@@ -10,6 +10,9 @@
 			/>
 			<view v-else class="hero__fallback" />
 			<view class="hero__scrim" />
+			<view v-if="loading" class="hero__loading">
+				<view class="hero__spin" />
+			</view>
 			<view class="hero__top" :style="{ paddingTop: statusBar + 'px' }">
 				<view class="hero__back" hover-class="hero__back--press" @click="back">
 					<image class="hero__back-ico" src="/static/ui/devotion/ico-back.svg" mode="aspectFit" />
@@ -24,7 +27,7 @@
 		<view class="about">
 			<view
 				class="about__avatar"
-				:style="detail.cover_url ? { backgroundImage: `url(${detail.cover_url})` } : {}"
+				:style="pastorAvatar ? { backgroundImage: `url(${pastorAvatar})` } : {}"
 			/>
 			<view class="about__body">
 				<text class="about__name">{{ aboutName }}</text>
@@ -33,11 +36,12 @@
 		</view>
 		<view class="rule" />
 
-		<scroll-view scroll-y class="list" :show-scrollbar="false">
+		<scroll-view scroll-y class="list" :style="listStyle" :show-scrollbar="false">
 			<view
 				v-for="(s, i) in sessions"
 				:key="s.id"
 				class="row"
+				:class="{ 'row--done': s.completed }"
 				hover-class="row--press"
 				@click="openSession(s, i)"
 			>
@@ -56,39 +60,88 @@
 			<view class="list__pad" />
 		</scroll-view>
 
-		<view v-if="continueSession" class="foot">
+		<!-- 隐藏按钮 -->
+		<!-- <view v-if="continueSession" class="foot">
 			<button class="cta" hover-class="cta--press" @click="openSession(continueSession.item, continueSession.index)">
 				{{ t('devotion_continue') }}
 			</button>
-		</view>
+		</view> -->
 	</view>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { ref, computed, nextTick, getCurrentInstance } from 'vue'
+import { onLoad, onShow, onReady } from '@dcloudio/uni-app'
 import { t } from '@/i18n/index.js'
 import { apiDevotionSeriesDetail } from '@/api/devotion.js'
 import { absolutizeMedia } from '@/utils/media.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
 
 const statusBar = getStatusBarPx()
-const seriesId = ref(0)
+const proxy = getCurrentInstance()?.proxy
+const seriesId = ref('')
 const detail = ref({})
 const loading = ref(false)
+const listH = ref(0)
+const listStyle = computed(() => (
+	listH.value > 0 ? { height: `${listH.value}px` } : {}
+))
+
+function fallbackListHeight() {
+	try {
+		const sys = uni.getSystemInfoSync() || {}
+		const win = Number(sys.windowHeight) || 0
+		const rpx = (Number(sys.windowWidth) || 375) / 750
+		const used = (402 + 160) * rpx
+		return Math.max(180, Math.floor(win - used))
+	} catch (e) {
+		return 0
+	}
+}
+
+function measureList() {
+	nextTick(() => {
+		try {
+			const q = uni.createSelectorQuery().in(proxy)
+			q.select('.page').boundingClientRect()
+			q.select('.hero').boundingClientRect()
+			q.select('.about').boundingClientRect()
+			q.select('.rule').boundingClientRect()
+			q.exec((res) => {
+				const pageH = Number(res?.[0]?.height) || 0
+				const used = (Number(res?.[1]?.height) || 0)
+					+ (Number(res?.[2]?.height) || 0)
+					+ (Number(res?.[3]?.height) || 0)
+				const win = Number(uni.getSystemInfoSync().windowHeight) || 0
+				const base = pageH > used + 40 ? pageH : win
+				if (base > used + 40) {
+					listH.value = Math.floor(base - used)
+					return
+				}
+				const guess = fallbackListHeight()
+				if (guess > 0) listH.value = guess
+			})
+		} catch (e) {}
+	})
+}
+
+listH.value = fallbackListHeight()
 
 const sessions = computed(() => detail.value.sessions || [])
 
 const sessionMeta = computed(() => {
 	const n = detail.value.session_count || sessions.value.length || 0
 	const done = sessions.value.filter((s) => s.completed).length
-	if (done > 0 && n > 0) return `${done}/${n} sessions`
-	return `${n} sessions`
+	if (done > 0 && n > 0) return t('devotion_sessions_progress', { done, n })
+	return t('devotion_sessions', { n })
 })
 
 const aboutName = computed(() => {
-	const tags = detail.value.tags || []
-	return tags[0] || t('brand')
+	return detail.value.pastor_name || (detail.value.tags || [])[0] || t('brand')
+})
+
+const pastorAvatar = computed(() => {
+	return detail.value.pastor_avatar_url || detail.value.cover_url || ''
 })
 
 const continueSession = computed(() => {
@@ -101,7 +154,8 @@ const continueSession = computed(() => {
 })
 
 onLoad((q) => {
-	seriesId.value = Number(q?.id || 0)
+	seriesId.value = decodeURIComponent(String(q?.id || '')).trim()
+	load()
 })
 
 async function load() {
@@ -117,6 +171,8 @@ async function load() {
 		detail.value = {
 			...d,
 			cover_url: absolutizeMedia(d.cover_url || '') || '',
+			pastor_name: d.pastor_name || '',
+			pastor_avatar_url: absolutizeMedia(d.pastor_avatar_url || '') || '',
 			sessions: Array.isArray(d.sessions) ? d.sessions : [],
 			subtitle: d.subtitle || '',
 			tags: Array.isArray(d.tags) ? d.tags : [],
@@ -126,6 +182,7 @@ async function load() {
 		uni.showToast({ title: t('devotion_empty'), icon: 'none' })
 	} finally {
 		loading.value = false
+		measureList()
 	}
 }
 
@@ -151,26 +208,31 @@ function openSession(s, index) {
 		uni.showToast({ title: t('devotion_session_locked'), icon: 'none' })
 		return
 	}
-	uni.navigateTo({ url: `/pagesA/devotion/session?id=${s.id}&series_id=${seriesId.value}` })
+		uni.navigateTo({ url: `/pagesA/devotion/session?id=${s.id}&series_id=${encodeURIComponent(seriesId.value)}` })
 }
 
 function back() {
 	uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/devotion/list' }) })
 }
 
-onMounted(load)
-onShow(load)
+onReady(measureList)
+onShow(() => {
+	if (!seriesId.value) return
+	load()
+	measureList()
+})
 </script>
 
 <style scoped lang="scss">
 @import '../../styles/manna-theme.scss';
 
 .page {
-	min-height: 100vh;
+	height: 100vh;
 	box-sizing: border-box;
 	background: #fff3ee;
 	display: flex;
 	flex-direction: column;
+	overflow: hidden;
 }
 
 .hero {
@@ -201,6 +263,30 @@ onShow(load)
 	bottom: 0;
 	height: 136rpx;
 	background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.55));
+}
+
+.hero__loading {
+	position: absolute;
+	inset: 0;
+	z-index: 3;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, 0.45);
+	pointer-events: none;
+}
+
+.hero__spin {
+	width: 68rpx;
+	height: 68rpx;
+	border: 6rpx solid rgba(255, 255, 255, 0.45);
+	border-top-color: #fff;
+	border-radius: 50%;
+	animation: hero-spin 0.8s linear infinite;
+}
+
+@keyframes hero-spin {
+	to { transform: rotate(360deg); }
 }
 
 .hero__top {
@@ -253,7 +339,7 @@ onShow(load)
 
 .about {
 	display: flex;
-	gap: 24rpx;
+	& > *:not(:first-child) { margin-left: 24rpx; }
 	padding: 16rpx 40rpx;
 	align-items: flex-start;
 }
@@ -298,9 +384,12 @@ onShow(load)
 }
 
 .list {
+	width: 100%;
 	flex: 1;
 	height: 0;
+	min-height: 0;
 	padding-bottom: 24rpx;
+	box-sizing: border-box;
 }
 
 .list__pad {
@@ -310,13 +399,17 @@ onShow(load)
 .row {
 	display: flex;
 	align-items: center;
-	gap: 24rpx;
+	& > *:not(:first-child) { margin-left: 24rpx; }
 	padding: 16rpx 40rpx;
 }
 
 .row--press {
 	opacity: 0.88;
 	background: rgba(255, 255, 255, 0.35);
+}
+
+.row--done {
+	opacity: 0.55;
 }
 
 .row__ico {

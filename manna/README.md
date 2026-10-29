@@ -4,21 +4,27 @@
 
 - `config/config.js` → `APP_KEY = 'manna'`
 - 请求头：`token` + `X-App-Key: manna` + `X-Platform`
-- Tab：Home / Quiz / Devotion / Bible / Me
-- 共用服务端：`fast_base/backend`；运营台：`frontend/admin`
+- Tab：**Home / Quiz / Devotion / Bible / Me**
+- 共用服务端：`backend`；运营台：`frontend/admin`
+- 页面地图与规范：[`Doc/前端维护文档.md`](../../Doc/前端维护文档.md) §3
+- 币规则：[`Doc/Manna币方案.md`](../../Doc/Manna币方案.md)（答题页右上角为**实时预览**，`finish` 才入账）
 
 ## 本地
 
 ```bash
-cd fast_base/frontend/mobile-manna
+cd frontend/mobile-manna
 npm install
 npm run dev:h5   # 默认端口 5175
 ```
 
-后端需已启动（默认 `http://127.0.0.1:8000/api`）。
+后端需已启动（默认 `http://127.0.0.1:8000/api`）。种子：`backend/scripts/seed_manna.py --covers`。
 
-## Phase 0 AC
+## 结构
 
-- [x] H5 能启动
-- [x] device-login 通（`app_key=manna`）
-- [x] 5 Tab 可切换占位页
+| 路径 | 说明 |
+| --- | --- |
+| `pages/` | 5 个 Tab |
+| `pagesA/` | 分包：答题 / 祷告 / 听经 / Me 子页等（`pages.json` 为准，约 32 路由） |
+| `utils/homeBg.js` | 首页日夜间背景池 |
+| `static/bootstrap/` | 冷启快照（`export_manna_bootstrap.py`） |
+| `docs/figma-frame-map.md` | 贴稿对照 |

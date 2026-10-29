@@ -2,6 +2,7 @@
  * 灵修课包 API
  */
 import { getRequest, postRequest } from '@/utils/http.js'
+import { withTz } from '@/utils/device.js'
 
 export function apiDevotionSeries(params = {}, other = {}) {
 	return getRequest('/devotion/series/', params, { showLoading: false, ...other })
@@ -20,5 +21,5 @@ export function apiDevotionProgress(params = {}, other = {}) {
 }
 
 export function apiDevotionComplete(params = {}, other = {}) {
-	return postRequest('/devotion/complete/', params, { showLoading: false, ...other })
+	return postRequest('/devotion/complete/', withTz(params), { showLoading: false, ...other })
 }

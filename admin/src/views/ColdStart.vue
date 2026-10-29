@@ -1,38 +1,45 @@
 <!--
-  冷启池：按 App × 语言 × 设备标记冷启语录，监控池内数量与 70/30 占比。
+  首页推荐：三池占比 + 运营推荐池语录列表。
 -->
 <template>
   <div>
     <div class="container mgb16">
       <ConfigPackList
-        title="冷启占比"
-        tips="兴趣池 / 运营池占比按维度打包，合计须为 100。空维=看全部占比包。"
+        title="三池占比"
+        tips="命中 / 运营推荐 / 纯随机合计须为 100。跳过引导用户：命中比例并入运营推荐。空维=看全部占比包。旧键 cold_start_interest_ratio / cold_start_ops_ratio 已弃用，请只改本页 pool_*_ratio。"
         :keys="RATIO_KEYS"
         :defaults="ratioDefaults"
-        remark="冷启占比"
-        dialog-width="480px"
+        remark="首页三池占比"
+        dialog-width="520px"
         :summary-keys="RATIO_KEYS"
         :validate-fn="validateRatios"
       >
         <template #form="{ form: rf }">
-          <el-form-item label="兴趣占比">
-            <el-input-number v-model="rf.cold_start_interest_ratio" :min="0" :max="100" />
+          <el-form-item label="命中比例">
+            <el-input-number v-model="rf.pool_hit_ratio" :min="0" :max="100" />
           </el-form-item>
-          <el-form-item label="运营池占比">
-            <el-input-number v-model="rf.cold_start_ops_ratio" :min="0" :max="100" />
+          <el-form-item label="运营推荐比例">
+            <el-input-number v-model="rf.pool_ops_ratio" :min="0" :max="100" />
+          </el-form-item>
+          <el-form-item label="纯随机比例">
+            <el-input-number v-model="rf.pool_random_ratio" :min="0" :max="100" />
           </el-form-item>
         </template>
         <template #summary="{ pack }">
-          兴趣 {{ pack.values.cold_start_interest_ratio ?? '—' }}
-          / 运营 {{ pack.values.cold_start_ops_ratio ?? '—' }}
+          命中 {{ pack.values.pool_hit_ratio ?? '—' }}
+          / 运营 {{ pack.values.pool_ops_ratio ?? '—' }}
+          / 随机 {{ pack.values.pool_random_ratio ?? '—' }}
         </template>
       </ConfigPackList>
+      <p class="plugins-tips muted">
+        旧「兴趣/运营 70/30」已迁移为三池，不再驱动首页。命中策略与同池排序见侧栏对应页面。
+      </p>
     </div>
 
     <div class="container">
       <p class="plugins-tips">
-        冷启池语录按正文语言入库（多数为 en）。列表空维=不过滤看全部池内条；选具体语言可精确筛。
-        文档建议每语言约 ≥15 条。当前筛选下池内 <strong>{{ total }}</strong> 条。
+        运营推荐池语录（原冷启池勾选）。列表空维=不过滤；选具体语言可精确筛。
+        当前筛选下池内 <strong>{{ total }}</strong> 条。
       </p>
       <ScopeFilter
         mode="browse"
@@ -49,27 +56,27 @@
       </div>
 
       <div class="pro-toolbar">
-        <div class="pro-toolbar-title">冷启池语录</div>
+        <div class="pro-toolbar-title">运营推荐池语录</div>
       </div>
 
       <el-table :data="rows">
-        <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column prop="app_key" label="App" width="90">
+        <el-table-column prop="id" label="ID" width="88" show-overflow-tooltip />
+        <el-table-column prop="app_key" label="App" min-width="110" width="110">
           <template #default="{ row }">{{ row.app_key || '全部' }}</template>
         </el-table-column>
-        <el-table-column prop="language" label="语言" width="80" />
-        <el-table-column prop="platform" label="设备" width="90">
+        <el-table-column prop="language" label="语言" min-width="100" width="100" />
+        <el-table-column prop="platform" label="设备" min-width="100" width="100">
           <template #default="{ row }">{{ row.platform || '全部' }}</template>
         </el-table-column>
-        <el-table-column prop="content" label="内容" />
-        <el-table-column prop="interest_tags" label="标签" width="180">
-          <template #default="{ row }">{{ tagsZh(row.interest_tags) }}</template>
+        <el-table-column prop="content" label="内容" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="theme" label="主主题" width="140" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.theme || '—' }}</template>
         </el-table-column>
         <el-table-column prop="sort_weight" label="权重" width="90" />
         <el-table-column label="池内" width="100">
           <template #default="{ row }">
             <el-switch
-              :model-value="row.in_cold_start_pool"
+              :model-value="row.in_ops_pool"
               @change="(v) => togglePool(row, v)"
             />
           </template>
@@ -90,15 +97,9 @@
       />
     </div>
 
-    <el-dialog v-model="visible" title="编辑冷启语录" width="640px" destroy-on-close>
-      <el-form label-width="100px">
+    <el-dialog v-model="visible" title="编辑运营推荐语录" width="640px" destroy-on-close>
+      <el-form label-width="130px" class="cold-start-form">
         <el-form-item label="内容"><el-input v-model="form.content" type="textarea" rows="4" /></el-form-item>
-        <el-form-item label="App">
-          <el-select v-model="form.app_key" filterable style="width: 100%">
-            <el-option label="全部 App" value="" />
-            <el-option v-for="a in APP_KEYS" :key="a" :label="a" :value="a" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="语言">
           <el-select v-model="form.language" style="width: 100%">
             <el-option v-for="l in langOpts" :key="l.value" :label="l.label" :value="l.value" />
@@ -111,18 +112,18 @@
             <el-option label="Android" value="android" />
           </el-select>
         </el-form-item>
-        <el-form-item label="兴趣标签">
-          <el-select v-model="interestTags" multiple filterable style="width: 100%" placeholder="选择兴趣标签">
+        <el-form-item label="主主题（推荐）">
+          <el-select v-model="form.theme" clearable filterable style="width: 100%" placeholder="标签库主主题">
             <el-option
-              v-for="t in interestOpts"
+              v-for="t in themeOpts"
               :key="t.value"
-              :label="optionLabelZh(t.value, t.label, INTEREST_TAG_ZH)"
+              :label="t.label || t.value"
               :value="t.value"
             />
           </el-select>
         </el-form-item>
         <el-form-item label="排序权重"><el-input-number v-model="form.sort_weight" /></el-form-item>
-        <el-form-item label="冷启池"><el-switch v-model="form.in_cold_start_pool" /></el-form-item>
+        <el-form-item label="运营推荐池"><el-switch v-model="form.in_ops_pool" /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="visible = false">取消</el-button>
@@ -133,9 +134,6 @@
 </template>
 
 <script setup>
-/**
- * 冷启池：占比维度包 + 池内语录列表（browse）。
- */
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { fetchQuotes, saveQuote, fetchContentEnums } from '../api'
@@ -143,17 +141,19 @@ import ScopeFilter from '../components/ScopeFilter.vue'
 import ConfigPackList from '../components/ConfigPackList.vue'
 import { loadWithCache, clearPageCache } from '../utils/pageCache'
 import { browseScopeParams, defaultCreateAppKey } from '../utils/scopeParams'
-import { APP_KEYS, INTEREST_TAG_ZH, LANG_OPTIONS, langOptionLabel, optionLabelZh, tagsZh } from '../utils/enumZh'
+import { LANG_OPTIONS, langOptionLabel } from '../utils/enumZh'
 
-const RATIO_KEYS = ['cold_start_interest_ratio', 'cold_start_ops_ratio']
+const RATIO_KEYS = ['pool_hit_ratio', 'pool_ops_ratio', 'pool_random_ratio']
 const ratioDefaults = {
-  cold_start_interest_ratio: 70,
-  cold_start_ops_ratio: 30,
+  pool_hit_ratio: 50,
+  pool_ops_ratio: 30,
+  pool_random_ratio: 20,
 }
 
 function validateRatios(f) {
-  const sum = Number(f.cold_start_interest_ratio || 0) + Number(f.cold_start_ops_ratio || 0)
-  if (sum !== 100) return '兴趣占比 + 运营池占比须为 100'
+  const sum =
+    Number(f.pool_hit_ratio || 0) + Number(f.pool_ops_ratio || 0) + Number(f.pool_random_ratio || 0)
+  if (sum !== 100) return '三池比例合计须为 100'
   return ''
 }
 
@@ -166,12 +166,11 @@ const platform = ref('')
 const language = ref('')
 const visible = ref(false)
 const form = ref({})
-const interestTags = ref([])
-const interestOpts = ref([])
+const themeOpts = ref([])
 const langOpts = ref([...LANG_OPTIONS])
 
 function cacheKey(p = page.value) {
-  return `cold_start_quotes_p${p}_${appKey.value || 'all'}_${language.value || 'all'}_${platform.value || 'all'}_${q.value || ''}`
+  return `ops_pool_quotes_p${p}_${appKey.value || 'all'}_${language.value || 'all'}_${platform.value || 'all'}_${q.value || ''}`
 }
 
 function onScopeChange() {
@@ -183,11 +182,11 @@ async function loadEnums() {
     const res = await fetchContentEnums()
     const data = res.results || {}
     return {
-      interestOpts: data.interest_tags || [],
+      themeOpts: data.interest_tags || [],
       langOpts: data.app_langs || [],
     }
   }, (data) => {
-    interestOpts.value = data.interestOpts || []
+    themeOpts.value = data.themeOpts || []
     const langs = data.langOpts || []
     langOpts.value = langs.length
       ? langs.map((l) => ({
@@ -204,7 +203,7 @@ async function load(p = page.value) {
     const params = {
       currentPage: page.value,
       pageSize: 20,
-      in_cold_start_pool: 1,
+      in_ops_pool: 1,
       q: q.value || undefined,
       ...browseScopeParams({
         appKey: appKey.value,
@@ -225,8 +224,8 @@ async function load(p = page.value) {
 
 async function togglePool(row, v) {
   try {
-    await saveQuote({ id: row.id, in_cold_start_pool: !!v })
-    ElMessage.success(v ? '已加入冷启池' : '已移出冷启池')
+    await saveQuote({ id: row.id, in_ops_pool: !!v })
+    ElMessage.success(v ? '已加入运营推荐池' : '已移出运营推荐池')
     clearPageCache(cacheKey())
     load()
   } catch (e) {
@@ -238,10 +237,10 @@ async function togglePool(row, v) {
 function openEdit(row) {
   form.value = {
     ...row,
-    app_key: row.app_key || '',
+    app_key: defaultCreateAppKey(),
     platform: row.platform || '',
+    theme: row.theme || '',
   }
-  interestTags.value = [...(row.interest_tags || [])]
   visible.value = true
 }
 
@@ -249,7 +248,8 @@ async function save() {
   try {
     await saveQuote({
       ...form.value,
-      interest_tags: interestTags.value,
+      app_key: defaultCreateAppKey(),
+      theme: form.value.theme || '',
     })
     ElMessage.success('已保存')
     visible.value = false
@@ -267,4 +267,8 @@ onMounted(async () => {
 
 <style scoped>
 .mgb16 { margin-bottom: 16px; }
+.muted { color: #667085; }
+.cold-start-form :deep(.el-form-item__label) {
+  white-space: nowrap;
+}
 </style>

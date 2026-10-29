@@ -26,6 +26,7 @@ import {
 	setToken,
 	setUserInfo,
 } from '@/utils/storageKeys.js'
+import { clearNativeOauthCache } from '@/utils/oauth.js'
 
 export { FORCE_LOGIN_KEY }
 
@@ -35,6 +36,19 @@ let _loginPromise = null
 export function shouldForceLoginPage() {
 	migrateLegacyStorageKeys()
 	return !!uni.getStorageSync(FORCE_LOGIN_KEY)
+}
+
+/** 本地是否已有可回访的登录态（token + 用户信息） */
+export function hasLocalSession() {
+	migrateLegacyStorageKeys()
+	try {
+		const token = String(getToken() || '').trim()
+		if (!token) return false
+		const user = getUserInfo()
+		return !!(user && typeof user === 'object' && (user.user_id || user.id))
+	} catch (e) {
+		return false
+	}
 }
 
 export function clearForceLoginPage() {
@@ -55,7 +69,24 @@ export function forceSessionExpiredToWelcome() {
 		uni.setStorageSync(FORCE_LOGIN_KEY, '1')
 	} catch (e) {}
 	_loginPromise = null
-	uni.reLaunch({ url: '/pagesA/welcome/welcome' })
+	clearNativeOauthCache().finally(() => {
+		uni.reLaunch({ url: '/pagesA/welcome/welcome' })
+	})
+}
+
+/**
+ * 申请注销后：只清 token / 用户缓存，不换 device_id。
+ * 冷静期内同机再登仍是原账号；换 device 会变成新用户。
+ */
+export function clearAuthToWelcome() {
+	_loginPromise = null
+	clearSessionKeys()
+	try {
+		uni.setStorageSync(FORCE_LOGIN_KEY, '1')
+	} catch (e) {}
+	clearNativeOauthCache().finally(() => {
+		uni.reLaunch({ url: '/pagesA/welcome/welcome' })
+	})
 }
 
 /**
@@ -132,6 +163,10 @@ export function setUser(user) {
 export async function clearLocalAccount() {
 	const keepLang = getCurrentLanguage()
 	_loginPromise = null
+
+	try {
+		await clearNativeOauthCache()
+	} catch (e) {}
 
 	try {
 		uni.clearStorageSync()

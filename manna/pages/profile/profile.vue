@@ -1,6 +1,10 @@
 <template>
 	<!-- Figma Me 938:1978 -->
-	<view class="page" :style="{ paddingTop: statusBar + 'px' }">
+	<view
+		class="page"
+		:class="{ 'page--mini': listenSession.mini }"
+		:style="{ paddingTop: statusBar + 'px' }"
+	>
 		<view class="cross" aria-hidden="true">
 			<view class="cross__v" />
 			<view class="cross__h" />
@@ -15,7 +19,7 @@
 					<image class="manna__ico" src="/static/ui/me/ico-manna.svg" mode="aspectFit" />
 				</view>
 				<text class="manna__lab">MANNA</text>
-				<text class="manna__hint">{{ t('ledger_tap_hint') }}</text>
+				<text class="manna__hint">{{ todayHint }}</text>
 			</view>
 			<view class="grid">
 				<view
@@ -48,7 +52,7 @@
 			</view>
 		</view>
 
-		<MannaTabBar v-if="tabOn" active="me" variant="light" />
+		<MannaTabBar v-show="tabOn" active="me" variant="light" />
 	</view>
 </template>
 
@@ -65,13 +69,18 @@ import {
 } from '@/api/manna.js'
 import { apiAppConfig } from '@/api/content.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
-import { hideNativeTabBar } from '@/utils/tabbar.js'
+import { hideNativeTabBar, scheduleCustomTabBarHide, setTabUiKey } from '@/utils/tabbar.js'
+import { track } from '@/utils/analytics.js'
 import { goVip } from '@/utils/vip.js'
+import { listenSession } from '@/utils/listenSession.js'
+import { openQuizPlayDirect } from '@/utils/quizAttempt.js'
 import MannaTabBar from '@/components/MannaTabBar.vue'
 
 const statusBar = getStatusBarPx()
 const tabOn = ref(true)
+let tabHideTimer = null
 const balance = ref(0)
+const todayManna = ref(0)
 const displayName = ref('')
 const prayMin = ref(0)
 const devotionMin = ref(0)
@@ -80,11 +89,16 @@ const quizCount = ref(0)
 const collectionsCount = ref(0)
 const vipEnabled = ref(false)
 
+const todayHint = computed(() => {
+	const n = Number(todayManna.value) || 0
+	return t('me_today_manna', { n: n > 0 ? `+${n}` : String(n) })
+})
+
 const statsGrid = computed(() => [
-	{ key: 'pray', value: String(prayMin.value), label: t('stat_pray_min'), icon: '/static/ui/me/ico-pray.svg' },
-	{ key: 'devotion', value: String(devotionMin.value), label: t('stat_devotion_min'), icon: '/static/ui/me/ico-devotion.svg' },
-	{ key: 'read', value: String(readMin.value), label: t('stat_read_min'), icon: '/static/ui/me/ico-read.svg' },
-	{ key: 'quiz', value: String(quizCount.value), label: t('stat_quiz_num'), icon: '/static/ui/me/ico-quiz.svg' },
+	{ key: 'pray', value: String(prayMin.value), label: `${t('stat_pray')} (Manna)`, icon: '/static/ui/me/ico-pray.svg' },
+	{ key: 'devotion', value: String(devotionMin.value), label: `${t('stat_devotion')} (Manna)`, icon: '/static/ui/me/ico-devotion.svg' },
+	{ key: 'read', value: String(readMin.value), label: `${t('stat_read')} (Manna)`, icon: '/static/ui/me/ico-read.svg' },
+	{ key: 'quiz', value: String(quizCount.value), label: `${t('stat_quiz')} (Manna)`, icon: '/static/ui/me/ico-quiz.svg' },
 ])
 
 const rows = computed(() => {
@@ -92,12 +106,12 @@ const rows = computed(() => {
 		{ key: 'calendar', label: t('me_calendar'), path: '/pagesA/calendar/calendar', icon: '/static/ui/me/ico-calendar.svg' },
 		{ key: 'collections', label: t('me_collections'), path: '/pagesA/profile/collections', icon: '/static/ui/me/ico-collections.svg' },
 		{ key: 'stories', label: t('me_stories'), path: '/pagesA/quiz/stories', icon: '/static/ui/me/ico-stories.svg' },
-		{ key: 'badges', label: t('me_badges'), path: '/pagesA/profile/badges', icon: '/static/ui/me/ico-badges.svg' },
-		{ key: 'bible', label: t('bible'), path: '/pages/bible/bible', icon: '/static/ui/me/ico-bible.svg', tab: true },
+		{ key: 'bible', label: t('bible'), path: '/pagesA/profile/bible-hub', icon: '/static/ui/me/ico-bible.svg' },
 		{ key: 'settings', label: t('settings'), path: '/pagesA/settings/settings', icon: '/static/ui/me/ico-settings.svg' },
 	]
 	if (vipEnabled.value) {
-		list.splice(5, 0, { key: 'vip', label: t('me_vip'), path: '', icon: '/static/ui/me/ico-vip.svg' })
+		const i = list.findIndex((r) => r.key === 'settings')
+		list.splice(i < 0 ? list.length : i, 0, { key: 'vip', label: t('me_vip'), path: '', icon: '/static/ui/me/ico-vip.svg' })
 	}
 	return list
 })
@@ -114,6 +128,7 @@ async function load() {
 	// 仅当 balance / stats / stats-card 全部失败时用假数；成功返回 0 保持真零
 	if (relatedFailed) {
 		balance.value = 520
+		todayManna.value = 0
 		prayMin.value = 5
 		devotionMin.value = 6
 		readMin.value = 0
@@ -121,44 +136,74 @@ async function load() {
 		vipEnabled.value = !!(cfg?.results?.manna_vip_enabled)
 		return
 	}
-	if (bal?.results) balance.value = bal.results.balance ?? balance.value
+	const b = bal?.results || {}
 	const s = st?.results || {}
-	if (typeof s.balance === 'number') balance.value = s.balance
-	prayMin.value = Math.round((s.pray_sec || 0) / 60)
-	devotionMin.value = Math.round((s.devotion_sec || 0) / 60)
-	readMin.value = Math.round((s.read_sec || 0) / 60)
-	quizCount.value = s.quiz_count || 0
-	const c = col?.results || {}
-	collectionsCount.value =
-		(c.highlights?.length || 0) + (c.notes?.length || 0) + (c.favorites?.length || 0)
 	const g = card?.results || {}
+	if (typeof b.balance === 'number') balance.value = b.balance
+	if (typeof s.balance === 'number') balance.value = s.balance
 	if (typeof g.manna === 'number') balance.value = g.manna
+	todayManna.value = pickAmount([g, s, b], ['manna_today'])
+	const minsFromSec = (sec) => {
+		const n = Number(sec) || 0
+		if (n <= 0) return 0
+		return Math.max(1, Math.round(n / 60))
+	}
+	prayMin.value = minsFromSec(s.pray_sec)
+	devotionMin.value = minsFromSec(s.devotion_sec)
+	readMin.value = minsFromSec(s.read_sec)
+	quizCount.value = s.quiz_count || 0
 	if (typeof g.pray_min === 'number') prayMin.value = g.pray_min
-	if (typeof g.devotion_min === 'number') devotionMin.value = g.devotion_min
+	if (typeof g.devotion_min === 'number') devotionMin.value = g.pray_num
 	if (typeof g.read_min === 'number') readMin.value = g.read_min
 	if (typeof g.quiz_num === 'number') quizCount.value = g.quiz_num
+	const c = col?.results || {}
+	collectionsCount.value = (c.favorites || []).filter((f) => f.target_type === 'verse_card').length
 	vipEnabled.value = !!(cfg?.results?.manna_vip_enabled)
+}
+
+function pickAmount(sources, keys) {
+	for (let i = 0; i < sources.length; i++) {
+		const obj = sources[i]
+		if (!obj || typeof obj !== 'object') continue
+		for (let j = 0; j < keys.length; j++) {
+			const v = obj[keys[j]]
+			if (typeof v === 'number' && Number.isFinite(v)) return v
+			if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Number(v)
+		}
+	}
+	return 0
 }
 
 onMounted(async () => {
 	tabOn.value = true
+	setTabUiKey('me')
 	hideNativeTabBar()
 	try {
 		const user = await ensureLogin({ explicit: true })
 		displayName.value = user?.display_name || getUser()?.display_name || ''
 		if (typeof user?.manna_balance === 'number') balance.value = user.manna_balance
+		if (typeof user?.manna_today === 'number') todayManna.value = user.manna_today
 	} catch (e) {}
 	await load()
 })
 
 onShow(() => {
+	if (tabHideTimer) {
+		clearTimeout(tabHideTimer)
+		tabHideTimer = null
+	}
 	tabOn.value = true
+	setTabUiKey('me')
 	hideNativeTabBar()
 	load()
+	track('page_view', { page_name: 'me' })
 })
 
 onHide(() => {
-	tabOn.value = false
+	tabHideTimer = scheduleCustomTabBarHide(() => {
+		tabOn.value = false
+		tabHideTimer = null
+	})
 })
 
 function onStat(s) {
@@ -175,7 +220,7 @@ function onStat(s) {
 		return
 	}
 	if (s.key === 'quiz') {
-		uni.switchTab({ url: '/pages/quiz/quiz' })
+		openQuizPlayDirect().catch(() => {})
 	}
 }
 
@@ -211,6 +256,10 @@ function openLedger() {
 	@include manna-peach-page;
 	overflow-x: hidden;
 	overflow-y: auto;
+}
+
+.page--mini {
+	padding-bottom: calc(#{$manna-page-pad-bottom} + 140rpx + env(safe-area-inset-bottom, 0px));
 }
 
 .cross {
@@ -253,7 +302,7 @@ function openLedger() {
 	padding: 8rpx 0 24rpx;
 	font-family: $manna-font-body !important;
 	font-weight: 700;
-	font-size: 36rpx;
+	font-size: 40rpx;
 	color: #000;
 }
 
@@ -281,7 +330,7 @@ function openLedger() {
 .manna__row {
 	display: flex;
 	align-items: center;
-	gap: 12rpx;
+	& > *:not(:first-child) { margin-left: 12rpx; }
 }
 
 .manna__n {
@@ -317,18 +366,26 @@ function openLedger() {
 .grid {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 16rpx;
 }
 
 .grid__cell {
-	width: calc(50% - 8rpx);
+	width: 48%;
+	margin-bottom: 16rpx;
 	box-sizing: border-box;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 24rpx 24rpx 24rpx 32rpx;
+	padding: 24rpx 20rpx 24rpx 28rpx;
 	border-radius: 24rpx;
 	background: linear-gradient(-65deg, #faece8 2%, #ffecd9 97%);
+}
+
+.grid__cell:nth-child(odd) {
+	margin-right: 4%;
+}
+
+.grid__cell:nth-child(n+3) {
+	margin-bottom: 0;
 }
 
 .grid__cell--press {
@@ -336,9 +393,12 @@ function openLedger() {
 }
 
 .grid__text {
+	flex: 1;
+	min-width: 0;
+	margin-right: 8rpx;
 	display: flex;
 	flex-direction: column;
-	gap: 4rpx;
+	& > *:not(:first-child) { margin-top: 4rpx; }
 }
 
 .grid__n {
@@ -352,13 +412,16 @@ function openLedger() {
 .grid__lab {
 	font-family: $manna-font-body;
 	font-weight: 300;
-	font-size: 24rpx;
+	font-size: 22rpx;
+	line-height: 1.25;
 	color: rgba(33, 33, 33, 0.8);
+	white-space: normal;
+	word-break: break-word;
 }
 
 .grid__ico {
-	width: 72rpx;
-	height: 72rpx;
+	width: 64rpx;
+	height: 64rpx;
 	flex-shrink: 0;
 }
 
@@ -369,7 +432,7 @@ function openLedger() {
 .menu__row {
 	display: flex;
 	align-items: center;
-	gap: 16rpx;
+	& > *:not(:first-child) { margin-left: 16rpx; }
 	padding: 16rpx 32rpx;
 }
 

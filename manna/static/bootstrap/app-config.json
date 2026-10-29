@@ -6,13 +6,11 @@
   "url_help": "",
   "url_download": "",
   "url_subscription": "",
-  "url_instagram": "https://instagram.com/manna",
-  "url_tiktok": "https://www.tiktok.com/@manna",
-  "url_facebook": "https://facebook.com/manna",
+  "url_instagram": "",
+  "url_tiktok": "",
+  "url_facebook": "",
   "support_email": "support@manna.app",
   "checkin_auto_popup": true,
-  "cold_start_interest_ratio": 60,
-  "cold_start_ops_ratio": 40,
   "free_quota_cap": 15,
   "vip_daily_quota": 80,
   "checkin_reward": 1,
@@ -49,5 +47,8 @@
   "login_title": "Sign in to Manna",
   "login_subtitle": "Continue with Apple, Google, or a quick device login.",
   "membership_products": [],
-  "revision": "2026-08-09T21:39:52.404095Z"
+  "revision": "2026-08-09T21:39:52.404095Z",
+  "pool_hit_ratio": 50,
+  "pool_ops_ratio": 30,
+  "pool_random_ratio": 20
 }

@@ -49,18 +49,100 @@ export const ONBOARDING_KEY_ZH = {
   legacy_disabled: '已停用旧题',
 }
 
-// ---------- 主题分类 ----------
+// ---------- 主题分类（Explore canonical + 历史多语文案）----------
 export const TOPIC_CATEGORY_ZH = {
-  calm: '平静',
-  faith: '信仰',
-  emotion: '情绪',
-  growth: '成长',
-  life: '生活',
-  seasonal: '节期',
+  draw_near: '亲近神',
+  health: '健康与身心',
+  journey: '旅途之光',
+  'Draw near to God': '亲近神',
+  'Health and well-being': '健康与身心',
+  'Light for your journey': '旅途之光',
+  亲近神: '亲近神',
+  健康与身心: '健康与身心',
+  旅途之光: '旅途之光',
+  'Acercarse a Dios': '亲近神',
+  'Salud y bienestar': '健康与身心',
+  'Luz para tu camino': '旅途之光',
+  'Aproximar-se de Deus': '亲近神',
+  'Saúde e bem-estar': '健康与身心',
+  'Luz para a jornada': '旅途之光',
+  神に近づく: '亲近神',
+  健康とウェルビーイング: '健康与身心',
+  旅路の光: '旅途之光',
+  '하나님께 가까이': '亲近神',
+  '건강과 웰빙': '健康与身心',
+  '여정을 비추는 빛': '旅途之光',
+  'اقترب من الله': '亲近神',
+  'الصحة والعافية': '健康与身心',
+  'نور لرحلتك': '旅途之光',
+  'Приблизьтесь к Богу': '亲近神',
+  'Здоровье и благополучие': '健康与身心',
+  'Свет на твоём пути': '旅途之光',
+  'Approche de Dieu': '亲近神',
+  'Santé et bien-être': '健康与身心',
+  'Lumière pour ton chemin': '旅途之光',
+  'Gott nahe kommen': '亲近神',
+  'Gesundheit und Wohlbefinden': '健康与身心',
+  'Licht für deinen Weg': '旅途之光',
+  'Lumapit sa Diyos': '亲近神',
+  'Kalusugan at kaginhawahan': '健康与身心',
+  'Liwanag sa iyong lakbay': '旅途之光',
+  'Avvicinati a Dio': '亲近神',
+  'Salute e benessere': '健康与身心',
+  'Luce per il tuo cammino': '旅途之光',
 }
 
-// ---------- 兴趣标签 ----------
-export const INTEREST_TAG_ZH = {
+export const TOPIC_CATEGORY_CANONICAL = [
+  { value: 'draw_near', label: '亲近神（draw_near）' },
+  { value: 'health', label: '健康与身心（health）' },
+  { value: 'journey', label: '旅途之光（journey）' },
+]
+
+export const TOPIC_TYPE_SLUGS = [
+  { value: 'bible_verses', label: '圣经经文（bible_verses）' },
+  { value: 'prayers', label: '祷告（prayers）' },
+  { value: 'quotes', label: '语录（quotes）' },
+  { value: 'affirmations', label: '肯定语（affirmations）' },
+]
+
+const CATEGORY_ALIAS_TO_CANON = (() => {
+  const map = {}
+  for (const [raw, zh] of Object.entries(TOPIC_CATEGORY_ZH)) {
+    const canon = zh === '亲近神' ? 'draw_near' : zh === '健康与身心' ? 'health' : zh === '旅途之光' ? 'journey' : ''
+    if (canon) map[String(raw).trim().toLowerCase()] = canon
+  }
+  map.draw_near = 'draw_near'
+  map.health = 'health'
+  map.journey = 'journey'
+  return map
+})()
+
+/** 把历史多语文案收成 canonical key，供表单下拉回填 */
+export function canonicalTopicCategory(raw) {
+  const s = String(raw || '').trim()
+  if (!s) return ''
+  return CATEGORY_ALIAS_TO_CANON[s.toLowerCase()] || CATEGORY_ALIAS_TO_CANON[s] || s
+}
+
+// ---------- 标签库主主题（展示用；兼容旧 slug） ----------
+export const THEME_TAG_ZH = {
+  Prayer: '祷告',
+  Family: '家庭',
+  'Anxiety Relief': '焦虑缓解',
+  Gratitude: '感恩',
+  Courage: '勇气',
+  'Work & Purpose': '工作与使命',
+  Peace: '平安',
+  Hope: '盼望',
+  Relationships: '人际关系',
+  Healing: '医治',
+  Faith: '信仰',
+  Strength: '力量',
+  Love: '爱',
+  Guidance: '指引',
+  Growth: '成长',
+  'Self-Worth': '自我价值',
+  // legacy slugs
   prayer: '祷告',
   family: '家庭',
   anxiety: '焦虑缓解',
@@ -73,9 +155,14 @@ export const INTEREST_TAG_ZH = {
   healing: '医治',
 }
 
-/** 壁纸 tags：主题分类 ∪ 兴趣标签（软约束，与种子/推荐对齐） */
+/** @deprecated 使用 THEME_TAG_ZH */
+export const INTEREST_TAG_ZH = THEME_TAG_ZH
+
+/** 壁纸 tags：Explore 栏目 ∪ 兴趣标签（软约束，与种子/推荐对齐） */
 export const WALLPAPER_TAG_ZH = {
-  ...TOPIC_CATEGORY_ZH,
+  draw_near: '亲近神',
+  health: '健康与身心',
+  journey: '旅途之光',
   ...INTEREST_TAG_ZH,
 }
 
@@ -103,6 +190,35 @@ export const FAITH_TAG_ZH = {
   learning: '探索中',
   exploring: '探索中（旧）',
 }
+
+/** 信仰类型（引导问卷 / 策略条件）下拉：中文展示，英文值入库 */
+export const FAITH_TYPE_OPTIONS = [
+  { value: 'new', label: '新约取向（new）' },
+  { value: 'old', label: '旧约取向（old）' },
+  { value: 'other', label: '其他（other）' },
+  { value: 'learning', label: '探索中（learning）' },
+]
+
+/** 祷告频率下拉 */
+export const PRAYER_FREQ_ZH = {
+  daily: '每天',
+  weekly: '每周',
+  occasionally: '偶尔',
+  just_started: '刚开始',
+}
+
+export const PRAYER_FREQ_OPTIONS = Object.keys(PRAYER_FREQ_ZH).map((value) => ({
+  value,
+  label: `${PRAYER_FREQ_ZH[value]}（${value}）`,
+}))
+
+/** 主主题下拉（策略条件等；值=标签库英文名） */
+export const INTEREST_TAG_OPTIONS = Object.entries(THEME_TAG_ZH)
+  .filter(([value]) => value[0] === value[0].toUpperCase())
+  .map(([value, zh]) => ({
+    value,
+    label: `${zh}（${value}）`,
+  }))
 
 // ---------- 举报原因 ----------
 export const REPORT_REASON_ZH = {
@@ -149,10 +265,16 @@ export const LANG_ZH = {
   pt: '葡语',
   ja: '日语',
   ko: '韩语',
+  ar: '阿语',
+  ru: '俄语',
+  fr: '法语',
+  de: '德语',
+  fil: '菲律宾语',
+  it: '意大利语',
 }
 
 /** App 界面语言码（对齐 APP_LANGS） */
-export const LANG_CODES = ['en', 'zh', 'es', 'pt', 'ja', 'ko']
+export const LANG_CODES = ['en', 'zh', 'es', 'pt', 'ja', 'ko', 'ar', 'ru', 'fr', 'de', 'fil', 'it']
 
 export function langOptionLabel(code) {
   const zh = LANG_ZH[code]
@@ -215,6 +337,9 @@ export const AI_PROVIDER_ZH = {
 }
 
 export const AI_MODEL_OPTIONS = [
+  'openai/gpt-4o',
+  'openai/gpt-4o-mini',
+  'openrouter/free',
   'gpt-4o-mini',
   'gpt-4o',
   'gpt-4.1-mini',
@@ -311,6 +436,14 @@ export const BOOL_CONFIG_KEYS = new Set([
   'watch_enabled',
   'checkin_auto_popup',
   'iap_sandbox_allowed',
+  'iap_verify_enabled',
+  'iap_restore_enabled',
+  'iap_unverified_allowed',
+  'device_login_enabled',
+  'oauth_login_enabled',
+  'translate_enabled',
+  'pool_rank_enabled',
+  'ai_suggest_enabled',
 ])
 
 /** 其他配置页：数值键 */
@@ -318,6 +451,18 @@ export const NUMBER_CONFIG_KEYS = new Set([
   'expose_dedupe_window',
   'cold_start_interest_ratio',
   'cold_start_ops_ratio',
+  'pool_hit_ratio',
+  'pool_ops_ratio',
+  'pool_random_ratio',
+  'pool_rank_share_weight',
+  'pool_rank_like_weight',
+  'pool_rank_half_life_days',
+  'pool_rank_window_days',
+  'pool_rank_like_alpha',
+  'pool_rank_like_beta',
+  'pool_rank_share_alpha',
+  'pool_rank_share_beta',
+  'pool_rank_faith_bonus',
   'vip_daily_quota',
   'trial_days',
   'newcomer_bonus',
@@ -326,17 +471,34 @@ export const NUMBER_CONFIG_KEYS = new Set([
   'free_quota_cap',
   'ai_temperature',
   'ai_timeout',
+  'ai_max_tokens',
+  'session_ttl_days',
+  'session_remember_days',
 ])
 
 // ---------- AppConfig 键 ----------
 export const CONFIG_KEY_ZH = {
-  expose_dedupe_window: 'Feed 曝光去重窗口',
+  expose_dedupe_window: 'Feed 曝光去重窗口（已废弃驱动）',
   // 2.0 teaser 键：与 3.0 真能力开关合并兼容，勿再写「仅壳/即将支持」
   widget_teaser_enabled: 'Widget · 真能力兼容开关',
   app_icon_teaser_enabled: 'App 图标 · 真能力兼容开关',
   dynamic_wallpaper_tab_enabled: '动态壁纸 · 真能力兼容开关',
-  cold_start_interest_ratio: '冷启兴趣比例',
-  cold_start_ops_ratio: '冷启运营比例',
+  cold_start_interest_ratio: '旧冷启兴趣比例（只读）',
+  cold_start_ops_ratio: '旧冷启运营比例（只读）',
+  pool_hit_ratio: '三池·命中比例',
+  pool_ops_ratio: '三池·运营推荐比例',
+  pool_random_ratio: '三池·纯随机比例',
+  pool_rank_enabled: '同池互动排序开关',
+  pool_rank_share_weight: '同池·分享权重',
+  pool_rank_like_weight: '同池·点赞权重',
+  pool_rank_half_life_days: '同池·半衰期(天)',
+  pool_rank_window_days: '同池·统计天数',
+  pool_rank_like_alpha: '同池·点赞平滑分子',
+  pool_rank_like_beta: '同池·点赞平滑分母',
+  pool_rank_share_alpha: '同池·分享平滑分子',
+  pool_rank_share_beta: '同池·分享平滑分母',
+  pool_rank_faith_bonus: '同池·信仰微调',
+  pool_rank_tie_break: '同池·同分规则',
   like_soft_signal: '点赞软信号',
   welcome_enabled: 'Welcome 开关',
   trial_intro_enabled: '试用夹层开关',
@@ -359,6 +521,14 @@ export const CONFIG_KEY_ZH = {
   widget_vip_borders: 'Widget VIP 边框列表',
   watch_enabled: 'Watch 开关',
   brand_name: '品牌名',
+  publisher_name: '发行方名称',
+  url_more_apps: '更多应用链接',
+  url_download: '分享下载落地页',
+  url_app_store: 'iOS App Store 下载链接',
+  url_play_store: 'Android Google Play 下载链接',
+  url_instagram: 'Instagram 链接',
+  url_tiktok: 'TikTok 链接',
+  url_facebook: 'Facebook 链接',
   legal_entity_name: '法律主体名',
   support_email: '支持邮箱',
   vip_daily_quota: 'VIP 每日 AI 额度',
@@ -372,12 +542,32 @@ export const CONFIG_KEY_ZH = {
   checkin_auto_popup: '打卡自动弹层',
   ai_provider: 'AI 提供商',
   ai_model: 'AI 模型',
+  ai_api_base: 'AI API Base',
+  ai_api_key: 'AI API Key',
+  ai_http_referer: 'AI HTTP-Referer',
+  ai_http_title: 'AI X-Title',
   ai_temperature: 'AI 温度',
   ai_timeout: 'AI 超时',
+  ai_max_tokens: 'AI 最大生成长度',
   ai_system_prompt: 'AI 系统提示词',
+  ai_suggest_enabled: 'AI 对话快捷追问',
   ai_greeting: 'AI 欢迎语',
   ai_crisis_footer: 'AI 危机页脚',
   iap_sandbox_allowed: 'IAP 沙盒开关',
+  iap_verify_enabled: 'IAP 验单开关',
+  iap_restore_enabled: 'IAP 恢复购买开关',
+  iap_unverified_allowed: 'IAP 未验签联调',
+  device_login_enabled: '设备登录开关',
+  oauth_login_enabled: 'Google/Apple 登录开关',
+  session_ttl_days: '会话天数',
+  session_remember_days: '记住我天数',
+  translate_enabled: '经文翻译开关',
+  bible_audio_root: '听经音频根目录',
+  bible_listen_bg_url: '听经底图',
+  manna_quiz_hub_bg_url: 'Quiz枢纽日间底图',
+  manna_quiz_hub_bg_night_url: 'Quiz枢纽夜间底图',
+  manna_verse_rotate: '今日经文轮换',
+  manna_prayer_rotate: '祷告轮换',
 }
 
 export function configKeyZh(key) {
@@ -428,4 +618,101 @@ export function parseConfigEdit(key, edit) {
     }
   }
   return edit
+}
+
+// ---------- 远程 PUSH ----------
+
+/** 日常 PUSH 时段 key → 当地时刻 / 展示名 */
+export const PUSH_SLOT_ZH = {
+  morning: '早晨 08:00',
+  noon: '中午 12:00',
+  afternoon: '傍晚 19:00',
+  evening: '夜晚 21:00',
+}
+
+export const PUSH_SLOT_OPTIONS = [
+  { value: 'morning', label: '早晨 08:00', hour: 8 },
+  { value: 'noon', label: '中午 12:00', hour: 12 },
+  { value: 'afternoon', label: '傍晚 19:00', hour: 19 },
+  { value: 'evening', label: '夜晚 21:00', hour: 21 },
+]
+
+/** 运营 PUSH 任务状态 */
+export const PUSH_CAMPAIGN_STATUS_ZH = {
+  draft: '草稿',
+  pending_review: '待审核',
+  rejected: '审核驳回',
+  approved: '审核通过',
+  queued: '待发送',
+  sending: '发送中',
+  done: '已完成',
+  failed: '发送失败',
+  expired: '已过期',
+}
+
+/** Element Plus Tag type */
+export const PUSH_CAMPAIGN_STATUS_TAG = {
+  draft: 'info',
+  pending_review: 'warning',
+  rejected: 'danger',
+  approved: '',
+  queued: '',
+  sending: '',
+  done: 'success',
+  failed: 'danger',
+  expired: 'info',
+}
+
+/** 调度模式 once / daily / weekly / monthly */
+export const PUSH_SCHEDULE_MODE_ZH = {
+  once: '一次',
+  daily: '每天',
+  weekly: '每周',
+  monthly: '每月',
+}
+
+export const PUSH_SCHEDULE_MODE_OPTIONS = [
+  { value: 'once', label: '一次' },
+  { value: 'daily', label: '每天' },
+  { value: 'weekly', label: '每周' },
+  { value: 'monthly', label: '每月' },
+]
+
+/** 周期系列状态（一次任务为空串） */
+export const PUSH_SERIES_STATUS_ZH = {
+  '': '—',
+  active: '进行中',
+  paused: '已暂停',
+  ended: '已结束',
+}
+
+export const PUSH_SERIES_STATUS_TAG = {
+  active: 'success',
+  paused: 'warning',
+  ended: 'info',
+}
+
+/** weekdays：0=周一 … 6=周日（与后端约定一致） */
+export const PUSH_WEEKDAY_OPTIONS = [
+  { value: 0, label: '周一' },
+  { value: 1, label: '周二' },
+  { value: 2, label: '周三' },
+  { value: 3, label: '周四' },
+  { value: 4, label: '周五' },
+  { value: 5, label: '周六' },
+  { value: 6, label: '周日' },
+]
+
+export const PUSH_TYPE_ZH = {
+  daily: '日常 PUSH',
+  campaign: '运营 PUSH',
+}
+
+export const PUSH_TARGET_STATUS_ZH = {
+  pending: '待发送',
+  invalid: '无效',
+  no_token: '无 Token',
+  skipped: '已跳过',
+  success: '成功',
+  failed: '失败',
 }

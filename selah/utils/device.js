@@ -32,9 +32,10 @@ export function rotateDeviceId() {
 	return id
 }
 
-/** IANA 时区，失败回退 UTC */
+/** IANA 时区，失败回退 UTC。安卓真机可能没有 Intl。 */
 export function getTimezone() {
 	try {
+		if (typeof Intl === 'undefined' || !Intl.DateTimeFormat) return 'UTC'
 		return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
 	} catch (e) {
 		return 'UTC'

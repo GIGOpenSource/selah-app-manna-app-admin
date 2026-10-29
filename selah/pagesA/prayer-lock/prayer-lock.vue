@@ -39,9 +39,8 @@
 import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
-import { safeBack } from '@/utils/nav.js'
+import { safeBack, goTab } from '@/utils/nav.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
-import { track } from '@/utils/analytics.js'
 import {
 	getLocalPrayerLockPrefs,
 	isPrayerDoneToday,
@@ -63,7 +62,6 @@ const statusLine = computed(() => {
 
 onLoad((q) => {
 	fromProfile.value = q?.from === 'profile'
-	track('prayer_lock_view', { mode: 'in_app' })
 })
 
 async function refresh() {
@@ -80,14 +78,13 @@ function goBack() {
 }
 
 function goChoose() {
-	track('prayer_lock_choose_tap', {})
 	uni.navigateTo({
 		url: `/pagesA/prayer-lock/apps?from=${fromProfile.value ? 'profile' : 'settings'}`,
 	})
 }
 
 function goPray() {
-	uni.switchTab({ url: '/pages/ai/ai' })
+	goTab('/pages/ai/ai')
 }
 
 onShow(refresh)

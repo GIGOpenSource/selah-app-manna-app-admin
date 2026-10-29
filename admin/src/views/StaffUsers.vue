@@ -14,6 +14,7 @@
         />
         <el-select v-model="role" clearable placeholder="角色" style="width: 140px" @change="load(1)">
           <el-option label="运营" value="operator" />
+          <el-option label="远程push" value="push_ops" />
           <el-option label="管理员" value="admin" />
           <el-option label="超级管理员" value="super_admin" />
         </el-select>
@@ -107,6 +108,7 @@
         <el-form-item label="角色" required>
           <el-select v-model="form.role" style="width: 100%" :disabled="form.id === myId">
             <el-option label="运营" value="operator" />
+            <el-option label="远程push" value="push_ops" />
             <el-option label="管理员" value="admin" />
             <el-option v-if="myRole === 'super_admin'" label="超级管理员" value="super_admin" />
           </el-select>
@@ -166,10 +168,11 @@ const appKey = ref(null)
 const myId = computed(() => auth.userId)
 const myRole = computed(() => auth.role)
 
-/** 角色 Tag 颜色：super_admin 红 / admin 橙 / 其余灰 */
+/** 角色 Tag 颜色：super_admin 红 / admin 橙 / push_ops 蓝 / 其余灰 */
 function roleTag(r) {
   if (r === 'super_admin') return 'danger'
   if (r === 'admin') return 'warning'
+  if (r === 'push_ops') return ''
   return 'info'
 }
 

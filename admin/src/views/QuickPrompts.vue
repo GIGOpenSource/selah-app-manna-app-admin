@@ -10,7 +10,7 @@
       v-model:platform="platform"
       @change="onScopeChange"
     />
-    <p class="plugins-tips">空维=不过滤（看全部）；选具体维才精确筛。</p>
+    <p class="plugins-tips">空维=不过滤（看全部）；选具体维才精确筛。这里只管理进入聊天页、出现在输入框上方的 3 条开场；服务端会按用户标签排序。回复后的追问在气泡下方，其中一条固定为「推荐经文」。</p>
     <div class="pro-toolbar">
       <div class="pro-toolbar-title">快捷开场</div>
       <div class="pro-toolbar-actions">
@@ -20,17 +20,17 @@
     <el-table :data="rows" v-loading="loading">
       <el-table-column prop="title" label="标题" width="180" />
       <el-table-column prop="prompt" label="Prompt" />
-      <el-table-column prop="app_key" label="App" width="90">
-        <template #default="{ row }">{{ row.app_key || '全部' }}</template>
+      <el-table-column prop="app_key" label="App" min-width="110" width="110">
+        <template #default="{ row }">{{ row.app_key || '空维' }}</template>
       </el-table-column>
-      <el-table-column prop="language" label="语言" width="80">
+      <el-table-column prop="language" label="语言" min-width="100" width="100">
         <template #default="{ row }">{{ row.language || '全部' }}</template>
       </el-table-column>
-      <el-table-column prop="platform" label="设备" width="90">
+      <el-table-column v-if="showPlat" prop="platform" label="设备" min-width="100" width="100">
         <template #default="{ row }">{{ row.platform || '全部' }}</template>
       </el-table-column>
-      <el-table-column prop="sort_order" label="排序" width="80" />
-      <el-table-column prop="enabled" label="启用" width="80">
+      <el-table-column prop="sort_order" label="排序" min-width="80" width="80" />
+      <el-table-column prop="enabled" label="启用" min-width="90" width="90">
         <template #default="{ row }">
           <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '是' : '否' }}</el-tag>
         </template>
@@ -55,23 +55,10 @@
       <el-form label-width="80px">
         <el-form-item label="标题"><el-input v-model="form.title" /></el-form-item>
         <el-form-item label="Prompt"><el-input v-model="form.prompt" type="textarea" rows="4" /></el-form-item>
-        <el-form-item label="App">
-          <el-select v-model="form.app_key" filterable style="width: 100%">
-            <el-option label="全局（两 App 可见）" value="" />
-            <el-option v-for="a in APP_KEYS" :key="a" :label="a" :value="a" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="语言">
           <el-select v-model="form.language" style="width: 100%">
             <el-option label="全部" value="" />
             <el-option v-for="l in LANG_OPTIONS" :key="l.value" :label="l.label" :value="l.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="设备">
-          <el-select v-model="form.platform" style="width: 100%">
-            <el-option label="全部" value="" />
-            <el-option label="iOS" value="ios" />
-            <el-option label="Android" value="android" />
           </el-select>
         </el-form-item>
         <el-form-item label="排序"><el-input-number v-model="form.sort_order" /></el-form-item>
@@ -95,7 +82,8 @@ import { fetchQuickPrompts, saveQuickPrompt } from '../api'
 import ScopeFilter from '../components/ScopeFilter.vue'
 import { loadWithCache, clearPageCache } from '../utils/pageCache'
 import { browseScopeParams, defaultCreateAppKey } from '../utils/scopeParams'
-import { APP_KEYS, LANG_OPTIONS } from '../utils/enumZh'
+import { LANG_OPTIONS } from '../utils/enumZh'
+import { shouldHidePlatform } from '../utils/productContext'
 
 const appKey = ref('')
 const language = ref('')
@@ -106,6 +94,7 @@ const total = ref(0)
 const loading = ref(false)
 const visible = ref(false)
 const form = ref({})
+const showPlat = !shouldHidePlatform()
 
 /** 缓存键含维度与页码 */
 function cacheKey() {
@@ -162,7 +151,11 @@ function open(row) {
 /** 保存开场提示并清维度缓存 */
 async function save() {
   try {
-    await saveQuickPrompt(form.value)
+    await saveQuickPrompt({
+      ...form.value,
+      app_key: defaultCreateAppKey(appKey.value),
+      platform: '',
+    })
     ElMessage.success('已保存')
     visible.value = false
     clearPageCache(cacheKey())

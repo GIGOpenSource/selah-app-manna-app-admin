@@ -48,6 +48,7 @@ import { ElMessage } from 'element-plus'
 import { adminLogin } from '../api'
 import { useTabsStore } from '../store/tabs'
 import { useAuthStore } from '../store/auth'
+import { syncAppKeyToAllowed } from '../utils/productContext'
 
 const router = useRouter()
 const tabs = useTabsStore()
@@ -90,7 +91,9 @@ async function submitForm() {
       user_id: data.user_id,
       role: data.role,
       permissions: data.permissions || [],
+      app_keys: data.app_keys || [],
     })
+    syncAppKeyToAllowed(data.app_keys || [])
     if (checked.value) {
       localStorage.setItem('login-param', JSON.stringify({ username: param.username }))
     } else {
@@ -165,5 +168,9 @@ async function submitForm() {
   font-size: 12px;
   color: #999;
   margin-top: 12px;
+}
+
+:deep(.el-form-item.is-error) {
+  margin-bottom: 42px;
 }
 </style>

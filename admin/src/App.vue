@@ -11,4 +11,5 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 
 <style>
 @import './assets/css/main.css';
+@import './assets/css/selah-cms.css';
 </style>

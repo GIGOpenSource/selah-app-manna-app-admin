@@ -9,9 +9,11 @@
 				<view class="nav-pill" @tap.stop="goBack">
 					<image class="nav-ico" src="/static/ui/ico-close.svg" mode="aspectFit" />
 				</view>
+				<text class="nav-title" :style="titleStyle">{{ pageHeading }}</text>
+				<view class="nav-spacer" />
 			</view>
-			<text class="page-title">{{ result.title || t('quiz_result_title') }}</text>
 		</view>
+		<text class="hero-title" :style="heroTitleStyle">{{ pageHeading }}</text>
 
 		<view class="score-card">
 			<text class="score-num">{{ result.score ?? 0 }}/{{ result.total ?? 0 }}</text>
@@ -45,39 +47,66 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
 import { apiQuizResult } from '@/api/content.js'
 import { safeBack } from '@/utils/nav.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
-import { track } from '@/utils/analytics.js'
+import { useCollapsingTitle } from '@/utils/collapsingTitle.js'
+import { openSharePage } from '@/utils/share.js'
 
 const { t } = useI18n()
 const statusBarPx = getStatusBarPx()
+const { titleStyle, heroTitleStyle } = useCollapsingTitle({
+	mode: 'hero',
+	statusBarPx,
+	fontStartRpx: 40,
+	fontEndRpx: 34,
+})
 const result = ref({ score: 0, total: 0, detail: [], title: '' })
 const attemptId = ref(0)
+const pageHeading = computed(() => result.value.title || t('quiz_result_title'))
 
 function goBack() {
 	safeBack('/pages/profile/profile')
 }
 
 function goList() {
+	const stack = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+	const idx = stack.findIndex((p) => {
+		const route = `/${String(p.route || p.__route__ || '').replace(/^\//, '')}`
+		return route === '/pagesA/quiz/quiz'
+	})
+	if (idx >= 0) {
+		const delta = stack.length - 1 - idx
+		if (delta > 0) {
+			uni.navigateBack({
+				delta,
+				fail: () => uni.redirectTo({ url: '/pagesA/quiz/quiz' }),
+			})
+			return
+		}
+	}
 	uni.redirectTo({ url: '/pagesA/quiz/quiz' })
+}
+
+function normKey(key) {
+	return String(key ?? '').trim().toLowerCase()
 }
 
 function labelFor(d, key) {
 	const opts = d.options || []
-	const hit = opts.find((o) => o.key === key)
-	return hit ? `${String(key || '').toUpperCase()}. ${hit.text}` : (key || '—')
+	const hit = opts.find((o) => normKey(o.key) === normKey(key))
+	const displayKey = hit ? hit.key : key
+	return hit ? `${String(displayKey || '').toUpperCase()}. ${hit.text}` : (key || '—')
 }
 
 function onShare() {
-	const text = encodeURIComponent(
-		`${result.value.title || t('quiz_title')}: ${result.value.score}/${result.value.total}`,
-	)
-	track('quiz_share', { attempt_id: attemptId.value })
-	uni.navigateTo({ url: `/pagesA/share/share?mode=quiz&text=${text}` })
+	openSharePage({
+		mode: 'quiz',
+		text: `${result.value.title || t('quiz_title')}: ${result.value.score}/${result.value.total}`,
+	})
 }
 
 onLoad(async (q) => {
@@ -86,11 +115,6 @@ onLoad(async (q) => {
 	try {
 		const res = await apiQuizResult(attemptId.value)
 		result.value = res.results || result.value
-		track('quiz_complete', {
-			attempt_id: attemptId.value,
-			score: result.value.score,
-			total: result.value.total,
-		})
 	} catch (e) {
 		uni.showToast({ title: e?.message || t('request_failed'), icon: 'none' })
 	}
@@ -102,16 +126,26 @@ onLoad(async (q) => {
 
 .page {
 	min-height: 100vh;
-	padding: 0 32rpx 220rpx;
+	/* 双按钮 footer（≈256rpx）+ 安全区，避免末题被遮挡 */
+	padding: 0 32rpx calc(300rpx + env(safe-area-inset-bottom));
 	background: $selah-bg-gray;
 	color: $selah-ink;
 	box-sizing: border-box;
 }
 .page-head {
 	@include selah-sticky-head;
+	background: $selah-bg-gray;
 }
 .head-glass {
-	@include selah-sticky-head-glass($selah-bg-gray);
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 50%;
+	width: 100vw;
+	margin-left: -50vw;
+	z-index: 0;
+	pointer-events: none;
+	background: $selah-bg-gray;
 }
 .custom-nav {
 	position: relative;
@@ -119,22 +153,38 @@ onLoad(async (q) => {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
+	justify-content: space-between;
 	min-height: 88rpx;
 }
 .nav-pill {
 	@include selah-nav-circle;
+	position: relative;
+	z-index: 2;
+	flex-shrink: 0;
 }
 .nav-ico {
 	width: 48rpx;
 	height: 48rpx;
 }
-.page-title {
+.nav-spacer {
+	width: 88rpx;
+	height: 88rpx;
+	flex-shrink: 0;
+}
+.nav-title {
+	@include selah-display-title;
+	flex: 1;
+	text-align: center;
+}
+.hero-title {
+	@include selah-display-title;
 	display: block;
 	position: relative;
 	z-index: 1;
-	@include selah-display-title;
 	font-size: 40rpx;
+	line-height: 1.2;
 	margin: 8rpx 0 24rpx;
+	will-change: opacity, transform;
 }
 .score-card {
 	background: linear-gradient(145deg, #b6badf, #fff0d9);

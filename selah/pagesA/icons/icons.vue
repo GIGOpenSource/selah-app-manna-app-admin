@@ -1,5 +1,5 @@
 <!--
-  App 图标选择：列表 + select-app-icon；VIP 锁走 goVip。
+  App 图标：点选未锁图标立即应用；当前不可重复选；锁定进 VIP。
 -->
 <template>
 	<view class="page">
@@ -21,8 +21,15 @@
 			<view
 				v-for="ic in list"
 				:key="ic.icon_key"
-				:class="['tile', selected === ic.icon_key ? 'on' : '']"
-				@tap="onPick(ic)"
+				:id="'expo-' + ic.icon_key"
+				:data-xid="ic.icon_key"
+				:class="[
+					'tile expo-icon',
+					applied === ic.icon_key ? 'on' : '',
+					ic.locked ? 'locked' : '',
+					applying === ic.icon_key ? 'busy' : '',
+				]"
+				@tap.stop="onPick(ic)"
 			>
 				<image
 					v-if="ic.preview_url"
@@ -35,20 +42,23 @@
 				</view>
 				<text v-if="ic.locked" class="lock">VIP</text>
 				<image
-					v-if="selected === ic.icon_key"
+					v-if="applied === ic.icon_key"
 					class="check"
 					src="/static/ui/icons/check.svg"
 					mode="aspectFit"
 				/>
+				<view v-if="applying === ic.icon_key" class="spin" />
 				<text class="label">{{ ic.title || ic.icon_key }}</text>
 			</view>
 		</view>
 
-		<view class="footer">
-			<view :class="['cta', !selected || saving ? 'disabled' : '']" @tap="onConfirm">
-				<text class="cta-text">{{ t('icons_apply') }}</text>
+		<text class="hint">{{ t('icons_hint') }}</text>
+
+		<view v-if="applying" class="mask" @tap.stop>
+			<view class="mask-card">
+				<view class="spin spin-lg" />
+				<text class="mask-text">{{ t('loading') }}</text>
 			</view>
-			<text class="hint">{{ t('icons_hint') }}</text>
 		</view>
 	</view>
 </template>
@@ -61,16 +71,20 @@ import { apiAppIcons, apiSelectAppIcon } from '@/api/content.js'
 import { safeBack } from '@/utils/nav.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
 import { goVip } from '@/utils/vip.js'
-import { track } from '@/utils/analytics.js'
 import { getUser, setUser } from '@/utils/session.js'
+import { nativeGetAppIcon, nativeSetAppIcon } from '@/utils/selahNative.js'
 
 const { t } = useI18n()
 const statusBarPx = getStatusBarPx()
 const list = ref([])
-const selected = ref('')
+/** 服务端已应用的当前图标 */
+const applied = ref('')
+/** 桌面图标是否已经跟 applied 对齐；没对齐时允许再点一次重试 */
+const nativeSynced = ref(true)
 const loading = ref(true)
-const saving = ref(false)
+const applying = ref('')
 const fromProfile = ref(false)
+let loadToken = 0
 
 onLoad((q) => {
 	fromProfile.value = q?.from === 'profile'
@@ -81,59 +95,85 @@ function goBack() {
 }
 
 async function load() {
+	const token = ++loadToken
 	loading.value = true
 	try {
 		const res = await apiAppIcons()
+		if (token !== loadToken || applying.value) return
 		list.value = res.results || []
 		const cur = list.value.find((x) => x.selected)
-		selected.value = cur?.icon_key || list.value[0]?.icon_key || ''
+		applied.value = cur?.icon_key || ''
+		nativeSynced.value = true
+		try {
+			const nr = await nativeGetAppIcon()
+			if (token !== loadToken || applying.value) return
+			if (nr?.ok && nr.icon_key && list.value.some((x) => x.icon_key === nr.icon_key)) {
+				if (!applied.value) applied.value = nr.icon_key
+				else nativeSynced.value = nr.icon_key === applied.value
+			}
+		} catch (e) {}
 	} catch (e) {
-		list.value = []
+		if (token === loadToken && !applying.value) list.value = []
 	} finally {
-		loading.value = false
+		if (token === loadToken) loading.value = false
 	}
 }
 
-function onPick(ic) {
+async function onPick(ic) {
+	if (!ic || applying.value) return
 	if (ic.locked) {
 		goVip('app_icon')
 		return
 	}
-	selected.value = ic.icon_key
-}
-
-async function onConfirm() {
-	if (!selected.value || saving.value) return
-	const hit = list.value.find((x) => x.icon_key === selected.value)
-	if (hit?.locked) {
-		goVip('app_icon')
+	// 已经选中且桌面也换成功时，不再重复点。桌面没换上时允许再点一次。
+	if (ic.icon_key === applied.value && nativeSynced.value) {
+		uni.showToast({ title: t('icons_already_current'), icon: 'none' })
 		return
 	}
-	saving.value = true
+	const prev = applied.value
+	applying.value = ic.icon_key
+	applied.value = ic.icon_key
+	list.value = list.value.map((x) => ({
+		...x,
+		selected: x.icon_key === ic.icon_key,
+	}))
 	try {
-		await apiSelectAppIcon(selected.value)
+		await apiSelectAppIcon(ic.icon_key)
+		let nativeOk = true
+		let skipped = false
 		try {
-			const { nativeSetAppIcon } = await import('@/utils/selahNative.js')
-			await nativeSetAppIcon(selected.value)
-		} catch (e) {}
+			const nr = await nativeSetAppIcon(ic.icon_key)
+			if (nr && nr.skipped) {
+				skipped = true
+				nativeOk = false
+			} else if (nr && nr.ok === false) {
+				nativeOk = false
+			}
+		} catch (e) {
+			nativeOk = false
+		}
 		const u = getUser() || {}
-		u.selected_icon_key = selected.value
+		u.selected_icon_key = ic.icon_key
 		setUser(u)
+		nativeSynced.value = nativeOk || skipped
+		if (skipped || !nativeOk) {
+			uni.showToast({ title: t('icons_native_unavailable'), icon: 'none' })
+		} else {
+			uni.showToast({ title: t('saved'), icon: 'none' })
+		}
+	} catch (e) {
+		applied.value = prev
 		list.value = list.value.map((x) => ({
 			...x,
-			selected: x.icon_key === selected.value,
+			selected: x.icon_key === prev,
 		}))
-		track('app_icon_change', { icon: selected.value, applied: true })
-		uni.showToast({ title: t('saved'), icon: 'none' })
-		setTimeout(goBack, 420)
-	} catch (e) {
 		if (e?.code === 403) {
 			goVip('app_icon')
 			return
 		}
 		uni.showToast({ title: e?.message || t('request_failed'), icon: 'none' })
 	} finally {
-		saving.value = false
+		applying.value = ''
 	}
 }
 
@@ -145,7 +185,7 @@ onMounted(load)
 
 .page {
 	min-height: 100vh;
-	padding: 0 32rpx 200rpx;
+	padding: 0 32rpx 80rpx;
 	background: $selah-bg-gray;
 	color: $selah-ink;
 	box-sizing: border-box;
@@ -189,16 +229,14 @@ onMounted(load)
 	margin: 12rpx 0 28rpx;
 }
 .grid {
-	display: flex;
-	flex-direction: row;
-	flex-wrap: wrap;
-	justify-content: space-between;
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 20rpx;
 }
 .tile {
 	position: relative;
-	width: 212rpx;
+	width: 100%;
 	padding: 24rpx 16rpx 20rpx;
-	margin-bottom: 20rpx;
 	border-radius: 32rpx;
 	background: $selah-card;
 	border: 2rpx solid transparent;
@@ -209,6 +247,25 @@ onMounted(load)
 }
 .tile.on {
 	border-color: $selah-ink;
+}
+.tile.busy {
+	opacity: 0.55;
+}
+.spin {
+	position: absolute;
+	top: 16rpx;
+	right: 16rpx;
+	width: 28rpx;
+	height: 28rpx;
+	border: 4rpx solid rgba(25, 25, 25, 0.18);
+	border-top-color: #191919;
+	border-radius: 50%;
+	animation: icon-spin 0.7s linear infinite;
+}
+@keyframes icon-spin {
+	to {
+		transform: rotate(360deg);
+	}
 }
 .face {
 	width: 100rpx;
@@ -261,30 +318,6 @@ onMounted(load)
 	padding: 80rpx 24rpx;
 	font-size: 28rpx;
 }
-.footer {
-	position: fixed;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
-	background: linear-gradient(180deg, rgba(245, 245, 245, 0) 0%, $selah-bg-gray 28%);
-}
-.cta {
-	height: 96rpx;
-	border-radius: $selah-radius-btn;
-	background: $selah-ink;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-.cta.disabled {
-	opacity: 0.4;
-}
-.cta-text {
-	color: #fff;
-	font-size: 32rpx;
-	font-weight: 600;
-}
 .hint {
 	display: block;
 	margin-top: 16rpx;
@@ -292,5 +325,36 @@ onMounted(load)
 	font-size: 22rpx;
 	color: $selah-muted;
 	line-height: 1.4;
+}
+.mask {
+	position: fixed;
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+	z-index: 200;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(25, 25, 25, 0.28);
+}
+.mask-card {
+	min-width: 200rpx;
+	padding: 36rpx 40rpx;
+	border-radius: 28rpx;
+	background: #fff;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+.mask-text {
+	margin-top: 16rpx;
+	font-size: 26rpx;
+	color: $selah-ink;
+}
+.spin-lg {
+	position: static;
+	width: 44rpx;
+	height: 44rpx;
 }
 </style>

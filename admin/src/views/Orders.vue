@@ -41,7 +41,7 @@
 
       <el-table :data="rows" v-loading="loading">
         <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column label="App" width="90">
+        <el-table-column label="App" min-width="110" width="110">
           <template #default="{ row }">
             <el-tag v-if="row.app_key" size="small" :type="row.app_key === 'manna' ? 'warning' : 'primary'">
               {{ row.app_key }}
@@ -74,7 +74,7 @@
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row)">详情</el-button>
             <el-dropdown v-if="row.status === 'active'" trigger="click" @command="(cmd) => onStatus(row, cmd)">
-              <el-button link type="danger">更多</el-button>
+              <el-button link type="danger" style="margin-top: 5px;">更多</el-button>
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item command="refunded">标记退款</el-dropdown-item>
@@ -96,21 +96,34 @@
       />
     </div>
 
-    <el-dialog v-model="detailVisible" title="订单详情" width="560px" destroy-on-close>
-      <el-descriptions v-if="detail" :column="1" border>
-        <el-descriptions-item label="订单ID">{{ detail.id }}</el-descriptions-item>
-        <el-descriptions-item label="App">{{ detail.app_key || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="用户">{{ detail.display_name || detail.username }} ({{ detail.user_id }})</el-descriptions-item>
-        <el-descriptions-item label="设备">{{ detail.device_id || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="平台">{{ detail.platform }}</el-descriptions-item>
-        <el-descriptions-item label="商店商品ID">{{ detail.product_id }}</el-descriptions-item>
-        <el-descriptions-item label="交易号">{{ detail.transaction_id }}</el-descriptions-item>
-        <el-descriptions-item label="原始交易号">{{ detail.original_transaction_id || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="试用">{{ detail.is_trial ? '是' : '否' }}</el-descriptions-item>
-        <el-descriptions-item label="状态">{{ statusLabel(detail.status) }}</el-descriptions-item>
-        <el-descriptions-item label="到期">{{ detail.expire_at || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="下单">{{ detail.created_at }}</el-descriptions-item>
-        <el-descriptions-item label="收据摘要">{{ detail.receipt_data || '-' }}</el-descriptions-item>
+    <el-dialog v-model="detailVisible" title="订单详情" width="720px" destroy-on-close>
+      <el-descriptions v-if="detail" class="order-detail" :column="2" border label-width="112px">
+        <el-descriptions-item label="订单 ID">{{ detail.id }}</el-descriptions-item>
+        <el-descriptions-item label="App">
+          <el-tag v-if="detail.app_key" size="small" :type="detail.app_key === 'manna' ? 'warning' : 'primary'">
+            {{ detail.app_key }}
+          </el-tag>
+          <span v-else>—</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="用户" :span="2">
+          {{ detail.display_name || detail.username || '—' }}（{{ detail.user_id }}）
+        </el-descriptions-item>
+        <el-descriptions-item label="设备" :span="2">{{ detail.device_id || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="平台">{{ detail.platform || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="试用">
+          <el-tag :type="detail.is_trial ? 'warning' : 'info'" size="small">{{ detail.is_trial ? '是' : '否' }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="statusType(detail.status)" size="small">{{ statusLabel(detail.status) }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="到期">{{ detail.expire_at || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="商店商品 ID" :span="2">{{ detail.product_id || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="交易号" :span="2">{{ detail.transaction_id || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="原始交易号" :span="2">{{ detail.original_transaction_id || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="下单时间" :span="2">{{ detail.created_at || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="收据摘要" :span="2">
+          <div class="order-receipt">{{ detail.receipt_data || '—' }}</div>
+        </el-descriptions-item>
       </el-descriptions>
     </el-dialog>
   </div>
@@ -204,5 +217,21 @@ onMounted(() => load(1))
   font-size: 12px;
   color: rgba(0, 0, 0, 0.45);
   margin-top: 2px;
+}
+
+.order-detail :deep(.el-descriptions__label) {
+  white-space: nowrap;
+}
+
+.order-detail :deep(.el-descriptions__content) {
+  word-break: break-all;
+}
+
+.order-receipt {
+  max-height: 140px;
+  overflow: auto;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 </style>

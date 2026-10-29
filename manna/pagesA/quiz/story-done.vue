@@ -10,7 +10,7 @@
 			</view>
 			<text class="nav__title">{{ t('quiz_bible_learning') }}</text>
 			<view class="balance">
-				<image class="balance__ico" src="/static/ui/quiz/ico-manna.svg" mode="aspectFit" />
+				<image class="balance__ico" src="/static/ui/quiz/ico-manna.png" mode="aspectFit" />
 				<text class="balance__n">{{ balance }}</text>
 			</view>
 		</view>
@@ -33,17 +33,21 @@ import { ref, onMounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { t } from '@/i18n/index.js'
 import { apiMannaBalance } from '@/api/manna.js'
-import { apiQuizStart } from '@/api/quiz.js'
-import { DEMO_STORY } from '@/utils/quizDemo.js'
+import { apiQuizStart, apiQuizStoryUnlock } from '@/api/quiz.js'
+import { cacheAttemptPayload, markShowQuizHub } from '@/utils/quizAttempt.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
+import { stashNewlyEarned } from '@/utils/badges.js'
+import { track } from '@/utils/analytics.js'
 
 const statusBar = getStatusBarPx()
-const title = ref(DEMO_STORY.title)
-const cover = ref(DEMO_STORY.cover_url)
-const balance = ref(240)
+const storyId = ref('')
+const title = ref('')
+const cover = ref('')
+const balance = ref(0)
 const levelId = ref(0)
 
 onLoad((q) => {
+	storyId.value = String(q?.id || '')
 	if (q?.title) title.value = decodeURIComponent(String(q.title))
 	levelId.value = Number(q?.level_id || 0)
 })
@@ -53,27 +57,37 @@ onMounted(async () => {
 		const bal = await apiMannaBalance()
 		if (typeof bal?.results?.balance === 'number') balance.value = bal.results.balance
 	} catch (e) {}
+	if (!storyId.value) return
+	try {
+		const res = await apiQuizStoryUnlock({ story_id: storyId.value })
+		stashNewlyEarned(res?.results?.newly_earned)
+		track('manna_story_complete', { story_id: storyId.value })
+		if (typeof res?.results?.balance === 'number') balance.value = res.results.balance
+	} catch (e) {}
 })
 
 async function testNow() {
 	const id = levelId.value || Number(uni.getStorageSync('manna_quiz_last_level_id') || 0)
 	if (!id) {
+		markShowQuizHub()
 		uni.switchTab({ url: '/pages/quiz/quiz' })
 		return
 	}
 	try {
-		const res = await apiQuizStart({ level_id: id })
+		const res = await apiQuizStart({ level_id: id, mode: 'story_tf' })
 		const d = res?.results || {}
 		if (!d.attempt_id) throw new Error('no attempt')
-		uni.setStorageSync('manna_quiz_attempt', {
-			...d,
+		cacheAttemptPayload(d, {
 			level_id: id,
 			level_no: d.level_no || uni.getStorageSync('manna_quiz_level_no') || 1,
-			balance: balance.value,
+			balance: typeof d.balance === 'number' ? d.balance : balance.value,
+			time_limit_sec: 30,
+			mode: 'story_tf',
 		})
 		uni.redirectTo({ url: `/pagesA/quiz/play?attempt_id=${d.attempt_id}` })
 	} catch (e) {
 		uni.showToast({ title: e?.message || t('quiz_start_fail'), icon: 'none' })
+		markShowQuizHub()
 		uni.switchTab({ url: '/pages/quiz/quiz' })
 	}
 }
@@ -123,7 +137,7 @@ $quiz-ok: #52aa4b;
 	display: flex;
 	align-items: center;
 	padding: 20rpx 40rpx;
-	gap: 8rpx;
+	& > *:not(:first-child) { margin-left: 8rpx; }
 }
 .nav__back {
 	width: 64rpx;
@@ -134,12 +148,12 @@ $quiz-ok: #52aa4b;
 }
 .nav__back-ico { width: 48rpx; height: 48rpx; }
 .nav__press { opacity: 0.7; }
-.nav__title { flex: 1; font-weight: 700; font-size: 36rpx; color: #000; }
+.nav__title { flex: 1; @include manna-nav-title; color: #000; }
 
 .balance {
 	display: flex;
 	align-items: center;
-	gap: 12rpx;
+	& > *:not(:first-child) { margin-left: 12rpx; }
 	padding: 16rpx 24rpx;
 	border-radius: 80rpx;
 	background: rgba(33, 33, 33, 0.5);
@@ -169,7 +183,7 @@ $quiz-ok: #52aa4b;
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 16rpx;
+	& > *:not(:first-child) { margin-top: 16rpx; }
 }
 
 .badge {

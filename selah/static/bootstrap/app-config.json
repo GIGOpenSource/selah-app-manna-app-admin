@@ -11,8 +11,6 @@
   "url_facebook": "https://facebook.com/selah",
   "support_email": "support@selah.app",
   "checkin_auto_popup": true,
-  "cold_start_interest_ratio": 60,
-  "cold_start_ops_ratio": 40,
   "free_quota_cap": 10,
   "vip_daily_quota": 100,
   "checkin_reward": 1,
@@ -49,5 +47,8 @@
   "login_title": "Sign in to Selah",
   "login_subtitle": "Continue with Apple, Google, or a quick device login.",
   "membership_products": [],
-  "revision": "2026-08-09T21:39:52.404095Z"
+  "revision": "2026-08-09T21:39:52.404095Z",
+  "pool_hit_ratio": 50,
+  "pool_ops_ratio": 30,
+  "pool_random_ratio": 20
 }

@@ -177,23 +177,31 @@ i {
 	background-color: #fafafa !important;
 	font-weight: 500;
 	color: rgba(0, 0, 0, 0.88);
-	padding: 12px 16px;
+	padding: 12px 10px;
 	white-space: nowrap;
 }
 
 .el-table td.el-table__cell {
-	padding: 12px 16px;
+	padding: 12px 10px;
 	white-space: nowrap;
 }
 
 /*
- * 单行、不省略号；列宽仍由 Element Plus colgroup 统一控制，
- * 保证表头 / 表体对齐，超宽由表格自身横向滚动。
+ * 短字段（语言 / App / 设备 / 排序 / 启用）不要出省略号。
+ * 长文列请加 show-overflow-tooltip，会带上 .el-tooltip 再显示省略号。
  */
 .el-table .cell {
 	white-space: nowrap;
 	word-break: keep-all;
 	overflow: hidden;
+	text-overflow: clip;
+}
+
+.el-table .cell.el-tooltip {
+	text-overflow: ellipsis;
+}
+
+.el-table th.el-table__cell > .cell {
 	text-overflow: clip;
 }
 
@@ -306,6 +314,10 @@ i {
 	line-height: 1.5715;
 }
 
+.container > .plugins-tips:last-child {
+	margin-bottom: 24px;
+}
+
 .pro-field-label {
 	color: rgba(0, 0, 0, 0.88);
 	font-size: 14px;
@@ -333,6 +345,19 @@ i {
 
 .container > .plugins-tips + .pro-toolbar {
 	padding-top: 16px;
+}
+
+.scope-filter + .plugins-tips,
+.plugins-tips + .scope-filter {
+	margin-top: 12px;
+}
+
+/* 表内可编辑正文（经文等）允许换行，避免被全局 nowrap 裁切；表头仍保持单行 */
+.el-table.allow-wrap td.el-table__cell,
+.el-table.allow-wrap td.el-table__cell .cell {
+	white-space: normal;
+	overflow: visible;
+	word-break: break-word;
 }
 
 .plugins-tips a {

@@ -7,6 +7,7 @@
  * - admin_user_id    : 数字用户 id（字符串存储）
  * - admin_role       : 角色名（如 admin / editor）
  * - admin_permissions: JSON 数组字符串，权限码如 ["ops","content"]
+ * - admin_app_keys   : JSON 数组，可管理 App；空=全部
  */
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
@@ -21,17 +22,28 @@ function readPerms() {
   }
 }
 
+function readAppKeys() {
+  try {
+    const raw = localStorage.getItem('admin_app_keys')
+    const list = raw ? JSON.parse(raw) : []
+    return Array.isArray(list) ? list.map((k) => String(k)).filter(Boolean) : []
+  } catch {
+    return []
+  }
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const permissions = ref(readPerms())
   const role = ref(localStorage.getItem('admin_role') || '')
   const username = ref(localStorage.getItem('admin_name') || '')
   const userId = ref(Number(localStorage.getItem('admin_user_id') || 0))
+  const appKeys = ref(readAppKeys())
 
   /**
    * 登录成功后写入会话：同步 localStorage + 内存 ref。
    * 各字段可选；仅传入的字段会更新（便于局部刷新）。
    */
-  function setSession({ token, username: name, user_id, role: r, permissions: perms }) {
+  function setSession({ token, username: name, user_id, role: r, permissions: perms, app_keys: keys }) {
     if (token) localStorage.setItem('admin_token', token)
     if (name != null) {
       localStorage.setItem('admin_name', name)
@@ -49,6 +61,11 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.setItem('admin_permissions', JSON.stringify(perms))
       permissions.value = [...perms]
     }
+    if (keys != null) {
+      const list = Array.isArray(keys) ? keys.map((k) => String(k)).filter(Boolean) : []
+      localStorage.setItem('admin_app_keys', JSON.stringify(list))
+      appKeys.value = list
+    }
   }
 
   /** 退出登录：清除全部 admin_* 键，并重置内存态 */
@@ -58,10 +75,12 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('admin_user_id')
     localStorage.removeItem('admin_role')
     localStorage.removeItem('admin_permissions')
+    localStorage.removeItem('admin_app_keys')
     permissions.value = []
     role.value = ''
     username.value = ''
     userId.value = 0
+    appKeys.value = []
   }
 
   /** 从 localStorage 重新灌入内存（路由守卫在刷新后调用） */
@@ -70,6 +89,7 @@ export const useAuthStore = defineStore('auth', () => {
     role.value = localStorage.getItem('admin_role') || ''
     username.value = localStorage.getItem('admin_name') || ''
     userId.value = Number(localStorage.getItem('admin_user_id') || 0)
+    appKeys.value = readAppKeys()
   }
 
   /** 判断当前账号是否拥有指定权限码 */
@@ -77,5 +97,5 @@ export const useAuthStore = defineStore('auth', () => {
     return permissions.value.includes(code)
   }
 
-  return { permissions, role, username, userId, setSession, clearSession, hydrateFromStorage, hasPerm }
+  return { permissions, role, username, userId, appKeys, setSession, clearSession, hydrateFromStorage, hasPerm }
 })

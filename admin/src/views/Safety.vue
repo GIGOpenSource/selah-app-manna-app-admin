@@ -69,16 +69,16 @@
           <template #default="{ row }">{{ labelZh(SAFETY_CATEGORY_ZH, row.category) }}</template>
         </el-table-column>
         <el-table-column prop="keyword" label="关键词" />
-        <el-table-column prop="app_key" label="App" width="90">
+        <el-table-column prop="app_key" label="App" min-width="110" width="110">
           <template #default="{ row }">{{ row.app_key || '全部' }}</template>
         </el-table-column>
-        <el-table-column prop="language" label="语言" width="80">
+        <el-table-column prop="language" label="语言" min-width="100" width="100">
           <template #default="{ row }">{{ row.language || '全部' }}</template>
         </el-table-column>
-        <el-table-column prop="platform" label="设备" width="90">
+        <el-table-column v-if="showPlat" prop="platform" label="设备" min-width="100" width="100">
           <template #default="{ row }">{{ row.platform || '全部' }}</template>
         </el-table-column>
-        <el-table-column label="启用" width="100">
+        <el-table-column label="启用" min-width="100" width="100">
           <template #default="{ row }">
             <el-switch :model-value="row.enabled" @change="(v) => toggleKw(row, v)" />
           </template>
@@ -128,16 +128,16 @@
         <el-table-column prop="country" label="国家" width="80" />
         <el-table-column prop="label" label="标签" />
         <el-table-column prop="phone_or_url" label="电话/链接" />
-        <el-table-column prop="app_key" label="App" width="90">
+        <el-table-column prop="app_key" label="App" min-width="110" width="110">
           <template #default="{ row }">{{ row.app_key || '全部' }}</template>
         </el-table-column>
-        <el-table-column prop="language" label="语言" width="80">
+        <el-table-column prop="language" label="语言" min-width="100" width="100">
           <template #default="{ row }">{{ row.language || '全部' }}</template>
         </el-table-column>
-        <el-table-column prop="platform" label="设备" width="90">
+        <el-table-column v-if="showPlat" prop="platform" label="设备" min-width="100" width="100">
           <template #default="{ row }">{{ row.platform || '全部' }}</template>
         </el-table-column>
-        <el-table-column label="启用" width="100">
+        <el-table-column label="启用" min-width="100" width="100">
           <template #default="{ row }">
             <el-switch :model-value="row.enabled" @change="(v) => toggleHl(row, v)" />
           </template>
@@ -170,6 +170,7 @@ import ScopeFilter from '../components/ScopeFilter.vue'
 import ConfigPackList from '../components/ConfigPackList.vue'
 import { browseScopeParams, defaultCreateAppKey } from '../utils/scopeParams'
 import { labelZh, SAFETY_CATEGORY_ZH, COUNTRY_OPTIONS } from '../utils/enumZh'
+import { shouldHidePlatform } from '../utils/productContext'
 
 const REFUSE_EXTRA = [
   { key: 'ai_refuse_general', label: '通用拒答' },
@@ -187,6 +188,7 @@ const hlPage = ref(1)
 const hlTotal = ref(0)
 const safetyCats = ref([])
 const kw = ref({ category: 'self_harm', keyword: '' })
+const showPlat = !shouldHidePlatform()
 const hl = ref({ country: 'US', label: '', phone_or_url: '' })
 
 const refuseDefs = computed(() => [

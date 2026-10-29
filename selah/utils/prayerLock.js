@@ -1,12 +1,24 @@
 /**
- * 祷告锁（App 内）：每日祷告前锁定所选功能入口。
- * 不涉及系统级锁第三方 App。
- *
- * prefs: { enabled, app_ids: featureKey[], last_prayer_date: 'YYYY-MM-DD' }
+ * App Lock：系统第三方 App 选择 + 权限申请；祷告解锁仍走 in-app 功能锁兼容。
  */
+import { goTab } from '@/utils/nav.js'
 const KEY = 'selah_prayer_lock_prefs'
 
-/** 可锁定的 Selah 功能（id 与 Profile customize / Quiz 键一致） */
+/** PRD：进入系统选择 App — 常见分心 App 清单（真系统 Picker 需 Screen Time 原生能力） */
+export const SYSTEM_APP_CATALOG = [
+	{ id: 'instagram', labelKey: 'plock_app_instagram' },
+	{ id: 'tiktok', labelKey: 'plock_app_tiktok' },
+	{ id: 'youtube', labelKey: 'plock_app_youtube' },
+	{ id: 'x', labelKey: 'plock_app_x' },
+	{ id: 'facebook', labelKey: 'plock_app_facebook' },
+	{ id: 'snapchat', labelKey: 'plock_app_snapchat' },
+	{ id: 'reddit', labelKey: 'plock_app_reddit' },
+	{ id: 'games', labelKey: 'plock_app_games' },
+	{ id: 'browser', labelKey: 'plock_app_browser' },
+	{ id: 'messages', labelKey: 'plock_app_messages' },
+]
+
+/** 可锁定的 Selah 功能（兼容旧祷告锁） */
 export const PRAYER_LOCK_FEATURE_CATALOG = [
 	{ id: 'compose', labelKey: 'compose_entry' },
 	{ id: 'topics', labelKey: 'topics_you_follow' },
@@ -19,10 +31,11 @@ export const PRAYER_LOCK_FEATURE_CATALOG = [
 	{ id: 'quiz', labelKey: 'bible_quiz' },
 ]
 
-/** @deprecated 兼容旧名 */
-export const PRAYER_LOCK_APP_CATALOG = PRAYER_LOCK_FEATURE_CATALOG
+/** @deprecated */
+export const PRAYER_LOCK_APP_CATALOG = SYSTEM_APP_CATALOG
 
 const NEVER_LOCK = new Set(['prayer_lock', 'alarm', 'settings', 'home', 'ai'])
+const SYSTEM_IDS = new Set(SYSTEM_APP_CATALOG.map((a) => a.id))
 
 export function localDateKey(d = new Date()) {
 	const y = d.getFullYear()
@@ -37,6 +50,7 @@ export function getLocalPrayerLockPrefs() {
 			enabled: false,
 			app_ids: [],
 			last_prayer_date: '',
+			screen_time_authorized: false,
 		}
 	)
 }
@@ -51,24 +65,20 @@ export function applyPrayerLockPrefsLocal(data) {
 		enabled: !!data?.enabled,
 		app_ids: ids.filter((id) => id && !NEVER_LOCK.has(id)).slice(0, 40),
 		last_prayer_date: data?.last_prayer_date ? String(data.last_prayer_date).slice(0, 32) : '',
+		screen_time_authorized: !!data?.screen_time_authorized,
 		updated_at: Date.now(),
 	}
 	uni.setStorageSync(KEY, next)
 	return next
 }
 
-/** 今日是否已完成祷告（解锁） */
 export function isPrayerDoneToday(prefs) {
 	const p = prefs || getLocalPrayerLockPrefs()
 	return !!(p.last_prayer_date && p.last_prayer_date === localDateKey())
 }
 
-/**
- * 某功能今日是否被 App 内锁挡住。
- * prayer_lock / alarm / AI / Home 永不锁。
- */
 export function isFeatureLocked(featureKey, prefs) {
-	if (!featureKey || NEVER_LOCK.has(featureKey)) return false
+	if (!featureKey || NEVER_LOCK.has(featureKey) || SYSTEM_IDS.has(featureKey)) return false
 	const p = prefs || getLocalPrayerLockPrefs()
 	if (!p.enabled) return false
 	const ids = p.app_ids || []
@@ -76,13 +86,9 @@ export function isFeatureLocked(featureKey, prefs) {
 	return !isPrayerDoneToday(p)
 }
 
-/**
- * 若锁定则引导去 Prayer（AI），返回 true 表示已拦截。
- */
 export function guardFeatureOrPray(featureKey, t) {
 	if (!isFeatureLocked(featureKey)) return false
-	const title =
-		(t && t('prayer_lock_blocked_title')) || 'Pray first'
+	const title = (t && t('prayer_lock_blocked_title')) || 'Pray first'
 	const body =
 		(t && t('prayer_lock_blocked_body')) ||
 		'This feature is locked until you spend time in prayer today.'
@@ -92,17 +98,39 @@ export function guardFeatureOrPray(featureKey, t) {
 		confirmText: (t && t('prayer_lock_go_pray')) || 'Pray now',
 		cancelText: (t && t('cancel')) || 'Cancel',
 		success: (res) => {
-			if (res.confirm) {
-				uni.switchTab({ url: '/pages/ai/ai' })
-			}
+			if (res.confirm) goTab('/pages/ai/ai')
 		},
 	})
 	return true
 }
 
-/**
- * 标记今日已祷告；可选同步服务端 prefs。
- */
+/** 打开系统 Screen Time / 应用限制设置（权限申请） */
+export function openSystemAppLockSettings() {
+	// #ifdef APP-PLUS
+	try {
+		if (plus.os.name === 'iOS') {
+			// Screen Time 无公开 deep link；打开系统设置
+			plus.runtime.openURL('App-prefs:SCREEN_TIME')
+			setTimeout(() => {
+				try {
+					plus.runtime.openURL('app-settings:')
+				} catch (e2) {}
+			}, 400)
+			return true
+		}
+		const main = plus.android.runtimeMainActivity()
+		const Intent = plus.android.importClass('android.content.Intent')
+		const Settings = plus.android.importClass('android.provider.Settings')
+		const intent = new Intent(Settings.ACTION_SETTINGS)
+		main.startActivity(intent)
+		return true
+	} catch (e) {
+		return false
+	}
+	// #endif
+	return false
+}
+
 export async function markPrayerDoneToday({ sync = true } = {}) {
 	const cur = getLocalPrayerLockPrefs()
 	const today = localDateKey()
@@ -122,9 +150,5 @@ export async function markPrayerDoneToday({ sync = true } = {}) {
 			if (res?.results) applyPrayerLockPrefsLocal(res.results)
 		} catch (e) {}
 	}
-	try {
-		const { track } = await import('@/utils/analytics.js')
-		track('prayer_lock_unlocked', { date: today })
-	} catch (e) {}
 	return getLocalPrayerLockPrefs()
 }

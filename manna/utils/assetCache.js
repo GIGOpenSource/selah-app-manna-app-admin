@@ -3,6 +3,8 @@
  * 包内 /static、data/blob/file 原样返回；H5 无法持久化文件时仍返回原 URL（靠浏览器缓存）。
  */
 
+import { mediaAuthHeaders, needsMediaAuth } from '@/utils/media.js'
+
 const MAP_KEY = 'manna_asset_local_map'
 const LEGACY_MAP_KEY = 'selah_asset_local_map'
 const inflight = new Map()
@@ -76,10 +78,13 @@ export function hasPersistedAsset(url) {
 
 /**
  * 强制下载并落盘（听经等）。
+ * @param {string} url
+ * @param {{ onProgress?: (pct: number) => void }} [options] onProgress 回调 0-100 的字节进度
  * @returns {Promise<{ ok: boolean, path: string, reason?: string }>}
  */
-export function downloadAndPersist(url) {
+export function downloadAndPersist(url, options = {}) {
 	const src = (url || '').trim()
+	const onProgress = typeof options.onProgress === 'function' ? options.onProgress : null
 	if (!src) return Promise.resolve({ ok: false, path: '', reason: 'empty' })
 	if (isBundledOrLocalUrl(src)) return Promise.resolve({ ok: true, path: src })
 
@@ -98,8 +103,9 @@ export function downloadAndPersist(url) {
 	}
 
 	const task = new Promise((resolve) => {
-		uni.downloadFile({
+		const dlTask = uni.downloadFile({
 			url: src,
+			header: needsMediaAuth(src) ? mediaAuthHeaders() : {},
 			success: (res) => {
 				if (res.statusCode !== 200 || !res.tempFilePath) {
 					resolve(src)
@@ -119,6 +125,13 @@ export function downloadAndPersist(url) {
 			},
 			fail: () => resolve(src),
 		})
+		// 真实字节进度：App/小程序/部分 H5 的 DownloadTask 才有 onProgressUpdate
+		if (onProgress && dlTask && typeof dlTask.onProgressUpdate === 'function') {
+			dlTask.onProgressUpdate((e) => {
+				const p = Number(e && e.progress)
+				if (Number.isFinite(p)) onProgress(Math.max(0, Math.min(100, p)))
+			})
+		}
 	}).finally(() => {
 		inflight.delete(src)
 	})
@@ -153,6 +166,7 @@ export function ensureLocalAsset(url) {
 		}
 		uni.downloadFile({
 			url: src,
+			header: needsMediaAuth(src) ? mediaAuthHeaders() : {},
 			success: (res) => {
 				if (res.statusCode !== 200 || !res.tempFilePath) {
 					resolve(src)

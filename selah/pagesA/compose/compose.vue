@@ -30,7 +30,7 @@
 		<scroll-view scroll-x class="chip-scroll" :show-scrollbar="false">
 			<view class="chip-row">
 				<view :class="['chip', wallpaperId == null ? 'on' : '']" @tap="pickWallpaper(null)">
-					<text>{{ t('compose_skip') }}</text>
+					<text class="chip-skip">{{ t('compose_skip') }}</text>
 				</view>
 				<view
 					v-for="w in wallpapers"
@@ -47,7 +47,7 @@
 		<scroll-view scroll-x class="chip-scroll" :show-scrollbar="false">
 			<view class="chip-row">
 				<view :class="['chip', themeId == null ? 'on' : '']" @tap="pickTheme(null)">
-					<text>{{ t('compose_skip') }}</text>
+					<text class="chip-skip">{{ t('compose_skip') }}</text>
 				</view>
 				<view
 					v-for="tp in topics"
@@ -81,7 +81,7 @@ import {
 } from '@/api/content.js'
 import { safeBack } from '@/utils/nav.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
-import { track } from '@/utils/analytics.js'
+import { openSharePage } from '@/utils/share.js'
 
 const { t } = useI18n()
 const statusBarPx = getStatusBarPx()
@@ -92,6 +92,7 @@ const wallpapers = ref([])
 const topics = ref([])
 const saving = ref(false)
 const savedId = ref(null)
+const savedContent = ref('')
 
 const draftLen = computed(() => (draft.value || '').length)
 const canSave = computed(() => {
@@ -104,17 +105,14 @@ function goBack() {
 }
 
 function onDraftInput() {
-	track('compose_edit', { len: draftLen.value })
 }
 
 function pickWallpaper(id) {
 	wallpaperId.value = id
-	track('compose_pick_wallpaper', { wallpaper_id: id || 0 })
 }
 
 function pickTheme(id) {
 	themeId.value = id
-	track('compose_pick_theme', { theme_id: id || 0 })
 }
 
 async function loadOptions() {
@@ -131,7 +129,6 @@ async function loadOptions() {
 async function onSave() {
 	if (!canSave.value || saving.value) return
 	saving.value = true
-	track('compose_save_tap', { len: draftLen.value })
 	try {
 		const content = draft.value.trim()
 		const res = await apiAffirmationSave({
@@ -145,11 +142,8 @@ async function onSave() {
 			},
 		})
 		savedId.value = res.results?.id || null
-		track('compose_publish', {
-			affirmation_id: savedId.value,
-			theme_id: themeId.value || 0,
-			wallpaper_id: wallpaperId.value || 0,
-		})
+		savedContent.value = content
+		draft.value = ''
 		uni.showToast({ title: t('saved'), icon: 'none' })
 	} catch (e) {
 		uni.showToast({ title: e?.message || t('request_failed'), icon: 'none' })
@@ -159,13 +153,13 @@ async function onSave() {
 }
 
 function goShare() {
-	const text = encodeURIComponent(draft.value.trim())
-	track('compose_share_tap', { affirmation_id: savedId.value })
-	uni.navigateTo({ url: `/pagesA/share/share?mode=affirmation&text=${text}` })
+	openSharePage({
+		mode: 'affirmation',
+		text: (savedContent.value || draft.value || '').trim(),
+	})
 }
 
 onMounted(() => {
-	track('compose_open', {})
 	loadOptions()
 })
 </script>
@@ -254,26 +248,30 @@ onMounted(() => {
 }
 .chip {
 	display: inline-flex;
+	flex-direction: row;
 	align-items: center;
 	justify-content: center;
+	flex-shrink: 0;
 	height: 72rpx;
 	padding: 0 28rpx;
 	margin-right: 16rpx;
 	border-radius: 999rpx;
 	background: $selah-card;
-	border: 2rpx solid transparent;
+	border: 2rpx solid rgba(25, 25, 25, 0.15);
 	box-sizing: border-box;
 	font-size: 26rpx;
 	color: $selah-ink;
+	white-space: nowrap;
 }
 .chip.on {
 	border-color: $selah-ink;
+	border-width: 2rpx;
 }
 .chip-media {
-	width: 96rpx;
-	height: 96rpx;
+	width: 160rpx;
+	height: 72rpx;
 	padding: 0;
-	border-radius: 24rpx;
+	border-radius: 999rpx;
 	overflow: hidden;
 }
 .chip-img {
@@ -285,6 +283,11 @@ onMounted(() => {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	flex-shrink: 0;
+}
+.chip-skip {
+	white-space: nowrap;
+	flex-shrink: 0;
 }
 .footer {
 	position: fixed;

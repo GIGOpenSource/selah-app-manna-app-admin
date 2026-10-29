@@ -1,8 +1,8 @@
 # mobile-manna 缺失与待办清单
 
-对照：[figma-frame-map.md](./figma-frame-map.md) · 审计日 2026-08-10 · **修复闭环 2026-08-10**
+对照：[figma-frame-map.md](./figma-frame-map.md) · 审计日 2026-08-14
 
-**总览：** 路由骨架与后端契约完整；演示数据经 **灌库 → Admin/API → 客户端** 联通。P0 / Scope A / P2 / P3·P4 主项与多数贴稿已完成。下文 **「未处理清单」** 为仍开放项。
+**总览：** 路由骨架与后端契约完整；演示数据经 **灌库 → Admin/API → 客户端** 联通。P0 / Scope A / P2 / P3·P4、INT 批次、币/徽章/首页背景池已落地。**人工验收勾选以 [Doc/Manna测试清单.md](../../../Doc/Manna测试清单.md) 为准。** 下文仅为仍开放的非阻塞项。
 
 ---
 
@@ -10,20 +10,19 @@
 
 ### A. UI 贴稿未齐（`偏`）
 
-无。Home / Bible 主壳 / versecard 已于 2026-08-10 贴齐（见 frame-map）。
+无。Home / Bible 主壳 / versecard 已贴齐（见 frame-map）。
 
 无稿自拟（非阻塞）：Welcome / Login / Settings / Legal。
 
-### B. 产品功能 2.0（有意延后）
+### B. 产品功能（多数已完成）
 
 | 项 | 现状 | 说明 |
 |----|------|------|
-| VIP 页 | done：`pagesA/vip/vip` + Me → `goVip('me')` | 失败软降 `me_vip_soon` |
-| Interstitial 夹层 | done：`pagesA/interstitial/interstitial`；VIP 可走 trial_intro | 冷启仍跳过 personalize；见 coldStart 注释 |
+| VIP 页 | done：`pagesA/vip/vip` | 失败软降 `me_vip_soon` |
+| Interstitial 夹层 | done：`pagesA/interstitial/interstitial` | 冷启可走 `personalize_intro`（CMS 有问卷时） |
 | 祷告分享 | toast `share_soon` | 可接 `apiMannaSharePayload` + `share.js` |
-| 听经定时 / 下载 | done：`listen` ActionSheet 定时（5–60 分 / 本章结束）+ App 落盘下载（H5 触发保存） | 播放优先本地缓存 |
-| 听经 Voice Female/Male | done：改写 `/bible-media/.../{female\|male}/...`，缺文件回退 | 全量需 `BIBLE_AUDIO_ROOT` |
-| Admin：Testimonies / Tags / StatsCopies / Ledger | done：独立 CMS 页 | — |
+| 听经定时 / 下载 / Voice | done | 见 listen 页 |
+| Admin CMS | done | Testimonies / Tags / StatsCopies / Ledger |
 
 ### C. API 可选接线（非阻塞）
 
@@ -32,21 +31,21 @@
 | `apiQuizResult` | 结果页主要用 finish 的 query | 可选进 result 刷新 |
 | `apiDevotionProgress` | 未调 | 列表进度聚合时再接 |
 | `apiMannaStoryCards` | Me 故事走 quiz stories | 若要独立「故事卡」Tab 再接 |
-| `apiMannaTestimonies` | Home testimony 卡仅切 Me | 2.0 证言流 |
+| `apiMannaTestimonies` | Home testimony 卡仅切 Me | 独立证言阅读页仍缺 |
 | `apiBibleTags` | 未用 | 标签筛选时再接 |
-| `apiQuota` / `apiDismissBindPrompt` / `apiOnboardingComplete` | 冷启跳过问卷 | 恢复 onboarding 时再接 |
+
+Onboarding：**非永远跳过**。后端有启用问卷且用户未 complete/skip 时走 `pagesA/onboarding/onboarding`。
 
 ### D. 内容 / 运维（非代码缺口）
 
 | 项 | 说明 |
 |----|------|
 | 圣经全文 / 全量音频 | 种子默认核心章；需 `seed_manna.py --full` 或 `MANNA_BIBLE_FULL=1` + `BIBLE_AUDIO_ROOT` |
-| 人工验收清单 | 见文末；尚未勾选跑通记录 |
 | Admin Placeholder | 无菜单死页，可删路由（可选清理） |
 
 ### E. 明确不做（勿再开坑）
 
-- 用客户端 `DEMO_*` / `quizDemo` 当演示主路径  
+- 用客户端 `DEMO_*` / `quizDemo` 当演示主路径（仅网络失败 catch 可 soft demo）  
 - 用 Django fixtures 替代 `seed_manna.py`  
 
 ---
@@ -62,7 +61,7 @@ Manna 登录代码在 `mobile-manna` 内独立维护（fork Selah 流程，不�
 | 页缓存 | `manna_page_cache:` 前缀 |
 | Welcome | Admin `WelcomeScreen` × app×语言×设备；客户端用 CMS 文案/图 |
 | Login 文案 | AppConfig `login_title` / `login_subtitle`（白名单已暴露）；i18n 回落 |
-| 后端防串号 | 已有用户 `app_key` 与请求不一致时 device/oauth 登录返回 409，不覆盖 |
+| 后端同机多 App | 设备登录按 `(device_id, app_key)` 建新 uid，不 409、不改绑；OAuth 三方 ID 仍全局唯一 |
 | 包内快照 | **仅** `export_manna_bootstrap.py` → `mobile-manna/static/bootstrap`（勿用 Selah 导出脚本/目录） |
 
 **改展示：** Admin → Welcome / 配置（Scope=`manna` + 语言/设备）→ 客户端刷新；发版前重导 Manna bootstrap。
@@ -82,7 +81,7 @@ seed_manna.py (--covers)
 **灌库：**
 
 ```bash
-cd fast_base/backend
+cd backend
 ./uivsbe_env/bin/python scripts/seed_manna.py --covers
 # 可选：--full / MANNA_BIBLE_FULL=1
 ```
@@ -100,7 +99,7 @@ cd fast_base/backend
 **发版 bootstrap（Manna 专用，勿与 Selah 混用）：**
 
 ```bash
-cd fast_base/backend
+cd backend
 ./uivsbe_env/bin/python scripts/export_manna_bootstrap.py
 # 或：cd ../frontend/mobile-manna && npm run export:bootstrap
 ```
@@ -119,10 +118,14 @@ cd fast_base/backend
 | P4 笔记/Amen/译本/日历日/祷告收藏/ActivityPing | done |
 | 登录独立（APP×语言×设备 Welcome/Login） | done |
 | 多数 Figma 帧标齐 | 见 frame-map（主路径帧均齐） |
+| 首页日夜间背景池 | `utils/homeBg.js` + `static/ui/home/bgs` |
+| Quiz play 实时预览余额 | 逐题 +10 / 首错 −10；`finish` 入账 |
 
 ---
 
-## 验收清单（待人工勾选）
+## 验收清单
+
+正式勾选见 [`Doc/Manna测试清单.md`](../../../Doc/Manna测试清单.md)。本表仅作工程自检提纲。
 
 - [ ] Home 今日经文来自 API（与 Admin 今日经文一致）
 - [ ] Quiz：levels → start → play（答对绿/答错 terra）→ finish → result

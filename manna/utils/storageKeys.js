@@ -10,6 +10,7 @@ export const IS_NEW_USER_KEY = 'manna_is_new_user'
 export const WELCOME_SEEN_KEY = 'manna_welcome_seen_version'
 export const CHECKIN_REMIND_KEY = 'manna_checkin_remind'
 export const REMINDER_PREFS_KEY = 'manna_reminder_prefs'
+export const DAILY_REMIND_KEY = 'manna_daily_remind_enabled'
 /** 语言：勿用裸 currentLanguage，H5 同域会与 Selah 互踩 */
 export const LANG_KEY = 'manna_currentLanguage'
 

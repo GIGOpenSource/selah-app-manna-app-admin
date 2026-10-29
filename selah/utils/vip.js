@@ -1,11 +1,29 @@
 /**
  * VIP 导航：trial_intro_enabled 且未看过 trial_intro 时先夹层再进 VIP。
+ * 已是会员则跳过买量弹层，直接进订阅管理页。
  */
 import { apiAppConfig } from '@/api/content.js'
-import { track } from '@/utils/analytics.js'
 import { readPageCache, writePageCache } from '@/utils/pageCache.js'
 import { APP_CONFIG_KEY } from '@/utils/wallpaperCache.js'
 import { appConfigRevision, resolveInterstitialScreen } from '@/utils/bootstrap.js'
+
+/** VIP/Plus 且未过期（expire_at 空视为仍有效）。 */
+export function isVipActive(user) {
+	let u = user
+	if (!u) {
+		try {
+			u = uni.getStorageSync('userInfo') || {}
+		} catch (e) {
+			u = {}
+		}
+	}
+	if (u.vip_level !== 'vip' && u.vip_level !== 'plus_vip') return false
+	if (u.vip_expire_at) {
+		const ts = Date.parse(u.vip_expire_at)
+		if (!Number.isNaN(ts) && ts < Date.now()) return false
+	}
+	return true
+}
 
 export function interstitialStorageKey(kind, version) {
 	return `interstitial_seen_${kind}_v${Number(version || 1)}`
@@ -25,21 +43,38 @@ export function markInterstitialSeen(kind, version) {
 	} catch (e) {}
 }
 
+function openVipUrl(url) {
+	uni.navigateTo({
+		url,
+		fail: () => {
+			uni.redirectTo({
+				url,
+				fail: () => uni.reLaunch({ url }),
+			})
+		},
+	})
+}
+
 /**
  * @param {string} [payTriggerSource='']
  * @param {object} [opts]
  * @param {number|string} [opts.lockContentId]
- * @param {boolean} [opts.trackPopup=true]
+ * @param {boolean} [opts.manage] 会员管理入口；已开通时也自动按管理走
+ * @param {boolean} [opts.skipTrialIntro] 已确认购买时跳过买量夹层，直接进订阅页
  */
 export async function goVip(payTriggerSource = '', opts = {}) {
 	const src = payTriggerSource || 'unknown'
-	if (opts.trackPopup !== false) {
-		track('vip_popup_show', {
-			pay_trigger_source: src,
-			lock_content_id: opts.lockContentId || '',
-		})
+	const manage = opts.manage === true || isVipActive()
+	if (opts.lockContentId) {
+		try {
+			uni.setStorageSync('selah_vip_lock_content_id', Number(opts.lockContentId) || 0)
+		} catch (e) {}
 	}
 	const vipUrl = `/pagesA/vip/vip?pay_trigger_source=${encodeURIComponent(src)}`
+	if (manage || opts.skipTrialIntro) {
+		openVipUrl(vipUrl)
+		return
+	}
 	try {
 		let cfg = readPageCache(APP_CONFIG_KEY) || {}
 		if (!Object.keys(cfg).length) {
@@ -68,9 +103,7 @@ export async function goVip(payTriggerSource = '', opts = {}) {
 				const ver = Number(row.version || 1)
 				if (!hasSeenInterstitial('trial_intro', ver)) {
 					const next = encodeURIComponent(vipUrl)
-					uni.navigateTo({
-						url: `/pagesA/interstitial/interstitial?kind=trial_intro&next=${next}`,
-					})
+					openVipUrl(`/pagesA/interstitial/interstitial?kind=trial_intro&next=${next}`)
 					return
 				}
 			}
@@ -78,5 +111,5 @@ export async function goVip(payTriggerSource = '', opts = {}) {
 	} catch (e) {
 		console.warn('trial_intro gate skipped', e)
 	}
-	uni.navigateTo({ url: vipUrl })
+	openVipUrl(vipUrl)
 }

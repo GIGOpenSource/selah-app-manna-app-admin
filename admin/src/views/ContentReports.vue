@@ -38,13 +38,25 @@
         </div>
       </div>
 
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        title="下架语录会进入「语录配置 → 回收站」"
+        description="在此或通过回收站均可恢复语录；恢复后 App 可再次展示（若仍为已发布状态）。"
+        style="margin-bottom: 12px"
+      />
+
       <div class="pro-toolbar">
         <div class="pro-toolbar-title">内容举报</div>
+        <div class="pro-toolbar-actions">
+          <el-button link type="primary" @click="goRecycleBin">语录回收站</el-button>
+        </div>
       </div>
 
       <el-table :data="rows" v-loading="loading">
         <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column label="App" width="90">
+        <el-table-column label="App" min-width="110" width="110">
           <template #default="{ row }">
             <el-tag v-if="row.app_key" size="small" :type="row.app_key === 'manna' ? 'warning' : 'primary'">
               {{ row.app_key }}
@@ -60,7 +72,10 @@
         </el-table-column>
         <el-table-column label="语录" min-width="220">
           <template #default="{ row }">
-            <div>#{{ row.content_id }} {{ row.quote_deleted ? '(已下架)' : '' }}</div>
+            <div>
+              #{{ row.content_id }}
+              <el-tag v-if="row.quote_deleted" type="danger" size="small" style="margin-left: 6px">已下架</el-tag>
+            </div>
             <div class="sub">{{ row.quote_content || '-' }}</div>
           </template>
         </el-table-column>
@@ -74,12 +89,15 @@
           </template>
         </el-table-column>
         <el-table-column prop="created_at" label="时间" width="170" />
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <template v-if="row.status === 'pending'">
               <el-button link type="primary" @click="onStatus(row, 'handled', false)">已处理</el-button>
               <el-button link type="danger" @click="onStatus(row, 'handled', true)">下架语录</el-button>
               <el-button link @click="onStatus(row, 'dismissed', false)">忽略</el-button>
+            </template>
+            <template v-else-if="row.quote_deleted">
+              <el-button link type="success" @click="onRestoreQuote(row)">恢复语录</el-button>
             </template>
             <span v-else class="sub">—</span>
           </template>
@@ -104,12 +122,15 @@
  * onStatus 第三参 softDelete=true 时同时软删被举报语录（soft_delete_quote）。
  */
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { fetchContentReports, updateContentReportStatus } from '../api'
+import { fetchContentReports, updateContentReportStatus, restoreQuote } from '../api'
+import { setCurrentAppKey } from '../utils/productContext'
 import ScopeFilter from '../components/ScopeFilter.vue'
 import { browseScopeParams } from '../utils/scopeParams'
 import { labelZh, REPORT_REASON_ZH } from '../utils/enumZh'
 
+const router = useRouter()
 const reasonOpts = ['inappropriate', 'hate', 'spam', 'copyright', 'other']
 const rows = ref([])
 const page = ref(1)
@@ -168,12 +189,40 @@ function onReset() {
  */
 async function onStatus(row, next, softDelete) {
   const tip = softDelete
-    ? `处理举报 #${row.id} 并下架语录 #${row.content_id}？`
+    ? `处理举报 #${row.id} 并下架语录 #${row.content_id}？下架后可在回收站恢复。`
     : `将举报 #${row.id} 标记为「${statusLabel(next)}」？`
-  await ElMessageBox.confirm(tip, '确认', { type: softDelete ? 'warning' : 'info' })
-  await updateContentReportStatus(row.id, next, softDelete)
-  ElMessage.success('已更新')
-  load()
+  try {
+    await ElMessageBox.confirm(tip, '确认', { type: softDelete ? 'warning' : 'info' })
+    await updateContentReportStatus(row.id, next, softDelete)
+    ElMessage.success(softDelete ? '已处理并下架语录' : '已更新')
+    load()
+  } catch (e) {
+    if (e !== 'cancel' && e?.message !== 'cancel') {
+      ElMessage.error(e?.message || e?.msg || '操作失败')
+    }
+  }
+}
+
+function goRecycleBin() {
+  setCurrentAppKey('selah')
+  router.push({ path: '/quotes', query: { panel: 'trash' } })
+}
+
+async function onRestoreQuote(row) {
+  try {
+    await ElMessageBox.confirm(
+      `从回收站恢复语录 #${row.content_id}？恢复后若状态为已发布，App 将重新展示。`,
+      '恢复语录',
+      { type: 'info' },
+    )
+    await restoreQuote(row.content_id)
+    ElMessage.success('语录已恢复')
+    load()
+  } catch (e) {
+    if (e !== 'cancel' && e?.message !== 'cancel') {
+      ElMessage.error(e?.message || e?.msg || '恢复失败')
+    }
+  }
 }
 
 onMounted(() => load(1))

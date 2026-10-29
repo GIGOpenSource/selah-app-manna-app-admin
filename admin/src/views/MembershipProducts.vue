@@ -37,15 +37,40 @@
         </template>
       </ConfigPackList>
 
-      <el-form inline class="sandbox-row" v-loading="sandboxLoading">
-        <el-form-item label="允许 Sandbox 验单（全局）">
+      <el-alert
+        v-if="iapUnverifiedAllowed"
+        type="error"
+        :closable="false"
+        show-icon
+        title="危险：已开启「未验签联调」"
+        description="生产环境仍须同时设置环境变量 ALLOW_IAP_UNVERIFIED=1 才会放行；否则仅 CMS 开关无效。该选项默认关闭，仅用于本地/联调，切勿在生产长期开启。"
+        style="margin: 0 0 16px"
+      />
+
+      <el-form class="sandbox-row" v-loading="sandboxLoading" label-width="168px">
+        <el-form-item label="Sandbox 验单">
           <el-switch v-model="iapSandboxAllowed" @change="saveSandbox" />
-          <span class="hint">始终写全局；生产仍须 ALLOW_IAP_SANDBOX=1</span>
+          <span class="hint">全局；生产仍须 ALLOW_IAP_SANDBOX=1</span>
+        </el-form-item>
+        <el-form-item label="IAP 验单">
+          <el-switch v-model="iapVerifyEnabled" @change="(v) => saveIapFlag('iap_verify_enabled', v, 'IAP 验单')" />
+        </el-form-item>
+        <el-form-item label="恢复购买">
+          <el-switch v-model="iapRestoreEnabled" @change="(v) => saveIapFlag('iap_restore_enabled', v, 'IAP 恢复')" />
+        </el-form-item>
+        <el-form-item label="未验签联调">
+          <el-switch
+            v-model="iapUnverifiedAllowed"
+            active-color="var(--el-color-danger)"
+            @change="onUnverifiedChange"
+          />
+          <span class="hint">默认关闭；生产须 ALLOW_IAP_UNVERIFIED=1 且 CMS 同时开启</span>
         </el-form-item>
       </el-form>
 
       <ScopeFilter
         mode="browse"
+        keep-platform
         v-model:app-key="skuAppKey"
         v-model:language="skuLang"
         v-model:platform="skuPlat"
@@ -68,20 +93,21 @@
 
       <el-table :data="rows" stripe border v-loading="loading">
         <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column prop="app_key" label="App" width="90">
-          <template #default="{ row }">{{ row.app_key || '全部' }}</template>
+        <el-table-column prop="app_key" label="App" min-width="110" width="110">
+          <template #default="{ row }">{{ row.app_key || '空维' }}</template>
         </el-table-column>
         <el-table-column prop="plan_type" label="套餐" width="90">
           <template #default="{ row }">{{ row.plan_type === 'yearly' ? '年度' : '月度' }}</template>
         </el-table-column>
-        <el-table-column prop="platform" label="平台" width="90" />
+        <el-table-column prop="platform" label="平台" min-width="100" width="100" />
         <el-table-column prop="store_product_id" label="商店商品ID" min-width="180" />
         <el-table-column prop="title" label="标题" min-width="140" />
         <el-table-column prop="price_display" label="价格文案" width="100" />
+        <el-table-column prop="original_price_display" label="原价文案" width="100" />
         <el-table-column prop="price_cents" label="成交价(分)" width="100" />
         <el-table-column prop="currency" label="币种" width="70" />
         <el-table-column prop="duration_days" label="天数" width="70" />
-        <el-table-column prop="enabled" label="启用" width="80">
+        <el-table-column prop="enabled" label="启用" min-width="90" width="90">
           <template #default="{ row }">
             <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '是' : '否' }}</el-tag>
           </template>
@@ -138,11 +164,6 @@
       class="sku-dialog"
     >
       <el-form label-width="120px">
-        <el-form-item label="App" required>
-          <el-select v-model="form.app_key" filterable :disabled="!!form.id" style="width: 100%">
-            <el-option v-for="a in APP_KEYS" :key="a" :label="a" :value="a" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="套餐类型" required>
           <el-select v-model="form.plan_type" style="width: 100%" @change="onPlanChange">
             <el-option label="月度" value="monthly" />
@@ -169,6 +190,17 @@
             <div v-for="lang in PRICE_LANGS" :key="lang" class="i18n-row">
               <span class="i18n-lang">{{ lang }}</span>
               <el-input v-model="priceI18n[lang]" :placeholder="`${lang} 展示价`" />
+            </div>
+          </div>
+        </el-form-item>
+        <el-form-item label="原价文案（默认）">
+          <el-input v-model="form.original_price_display" placeholder="划线原价；无对应语言时回落" />
+        </el-form-item>
+        <el-form-item label="原价文案多语言">
+          <div class="i18n-grid">
+            <div v-for="lang in PRICE_LANGS" :key="`orig-${lang}`" class="i18n-row">
+              <span class="i18n-lang">{{ lang }}</span>
+              <el-input v-model="originalPriceI18n[lang]" :placeholder="`${lang} 原价`" />
             </div>
           </div>
         </el-form-item>
@@ -232,25 +264,42 @@ import ConfigPackList from '../components/ConfigPackList.vue'
 import ScopeFilter from '../components/ScopeFilter.vue'
 import { loadWithCache, clearPageCache } from '../utils/pageCache'
 import { browseScopeParams, defaultCreateAppKey } from '../utils/scopeParams'
-import { APP_KEYS, CURRENCY_OPTIONS } from '../utils/enumZh'
+import { CURRENCY_OPTIONS, LANG_CODES } from '../utils/enumZh'
 
-const PRICE_LANGS = ['en', 'zh', 'es', 'pt', 'ja', 'ko']
+const PRICE_LANGS = LANG_CODES
 const priceI18n = reactive(Object.fromEntries(PRICE_LANGS.map((l) => [l, ''])))
+const originalPriceI18n = reactive(Object.fromEntries(PRICE_LANGS.map((l) => [l, ''])))
 
-function resetPriceI18n(src = {}) {
+function resetI18nMap(target, src = {}) {
   const map = src && typeof src === 'object' ? src : {}
   for (const lang of PRICE_LANGS) {
-    priceI18n[lang] = map[lang] || ''
+    target[lang] = map[lang] || ''
   }
 }
 
-function collectPriceI18n() {
+function collectI18nMap(source) {
   const out = {}
   for (const lang of PRICE_LANGS) {
-    const v = String(priceI18n[lang] || '').trim()
+    const v = String(source[lang] || '').trim()
     if (v) out[lang] = v
   }
   return out
+}
+
+function resetPriceI18n(src = {}) {
+  resetI18nMap(priceI18n, src)
+}
+
+function collectPriceI18n() {
+  return collectI18nMap(priceI18n)
+}
+
+function resetOriginalPriceI18n(src = {}) {
+  resetI18nMap(originalPriceI18n, src)
+}
+
+function collectOriginalPriceI18n() {
+  return collectI18nMap(originalPriceI18n)
 }
 
 const SLOT_META = [
@@ -293,6 +342,9 @@ const slots = ref({
 })
 
 const iapSandboxAllowed = ref(true)
+const iapVerifyEnabled = ref(true)
+const iapRestoreEnabled = ref(true)
+const iapUnverifiedAllowed = ref(false)
 const sandboxLoading = ref(false)
 
 const slotAppKey = computed(() => defaultCreateAppKey(skuAppKey.value))
@@ -335,14 +387,52 @@ function cacheKey() {
 async function loadSandbox() {
   sandboxLoading.value = true
   try {
-    const res = await fetchConfigs({ keys: 'iap_sandbox_allowed', app_key: '', language: '', platform: '' })
-    const row = (res.results || []).find((r) => r.key === 'iap_sandbox_allowed')
-    if (row) iapSandboxAllowed.value = !!row.value
+    const res = await fetchConfigs({
+      keys: 'iap_sandbox_allowed,iap_verify_enabled,iap_restore_enabled,iap_unverified_allowed',
+      app_key: '',
+      language: '',
+      platform: '',
+    })
+    const rows = res.results || []
+    const map = {}
+    for (const r of rows) map[r.key] = r.value
+    if (map.iap_sandbox_allowed != null) iapSandboxAllowed.value = !!map.iap_sandbox_allowed
+    if (map.iap_verify_enabled != null) iapVerifyEnabled.value = !!map.iap_verify_enabled
+    if (map.iap_restore_enabled != null) iapRestoreEnabled.value = !!map.iap_restore_enabled
+    if (map.iap_unverified_allowed != null) iapUnverifiedAllowed.value = !!map.iap_unverified_allowed
   } catch {
     /* ignore */
   } finally {
     sandboxLoading.value = false
   }
+}
+
+async function saveIapFlag(key, val, label) {
+  try {
+    await saveConfig(key, !!val, label, { app_key: '', language: '', platform: '' })
+    ElMessage.success(`${label}已保存（全局）`)
+  } catch (e) {
+    if (key === 'iap_verify_enabled') iapVerifyEnabled.value = !val
+    if (key === 'iap_restore_enabled') iapRestoreEnabled.value = !val
+    if (key === 'iap_unverified_allowed') iapUnverifiedAllowed.value = !val
+    ElMessage.error(e?.message || e?.msg || '保存失败')
+  }
+}
+
+async function onUnverifiedChange(val) {
+  if (val) {
+    try {
+      await ElMessageBox.confirm(
+        '开启后，服务端在 ALLOW_IAP_UNVERIFIED=1 时可能接受未验签的 IAP 凭证。生产环境默认应关闭。确认开启？',
+        '未验签联调',
+        { type: 'warning', confirmButtonText: '仍要开启', cancelButtonText: '取消' },
+      )
+    } catch {
+      iapUnverifiedAllowed.value = false
+      return
+    }
+  }
+  await saveIapFlag('iap_unverified_allowed', val, 'IAP 未验签')
 }
 
 async function saveSandbox(val) {
@@ -417,6 +507,8 @@ async function saveSlots() {
         title: existing?.title || `${app} ${meta.title}`,
         price_display: existing?.price_display_default || existing?.price_display || '',
         price_display_i18n: existing?.price_display_i18n || {},
+        original_price_display: existing?.original_price_display_default || existing?.original_price_display || '',
+        original_price_display_i18n: existing?.original_price_display_i18n || {},
         price_cents: existing?.price_cents ?? 0,
         currency: existing?.currency || 'USD',
         duration_days: existing?.duration_days || meta.days,
@@ -444,6 +536,7 @@ function openEdit(row) {
         ...row,
         app_key: row.app_key || app,
         price_display: row.price_display_default || row.price_display || '',
+        original_price_display: row.original_price_display_default || row.original_price_display || '',
         trial_days: row.trial_days ?? undefined,
       }
     : {
@@ -453,6 +546,7 @@ function openEdit(row) {
         store_product_id: `${app}.vip.monthly`,
         title: `${app} VIP Monthly`,
         price_display: '',
+        original_price_display: '',
         price_cents: 0,
         currency: 'USD',
         duration_days: 30,
@@ -462,14 +556,12 @@ function openEdit(row) {
         remark: `pack:${app}`,
       }
   resetPriceI18n(row?.price_display_i18n)
+  resetOriginalPriceI18n(row?.original_price_display_i18n)
   visible.value = true
 }
 
 async function save() {
-  if (!(form.value.app_key || '').trim()) {
-    ElMessage.warning('请选择 App')
-    return
-  }
+  form.value.app_key = defaultCreateAppKey(skuAppKey.value)
   if (!(form.value.store_product_id || '').trim()) {
     ElMessage.warning('请填写商店商品ID')
     return
@@ -481,7 +573,9 @@ async function save() {
       payload.trial_days = null
     }
     payload.price_display_i18n = collectPriceI18n()
+    payload.original_price_display_i18n = collectOriginalPriceI18n()
     delete payload.price_display_default
+    delete payload.original_price_display_default
     await saveMembershipProduct(payload)
     ElMessage.success('已保存，iap_* 已按 App 同步')
     visible.value = false
@@ -506,12 +600,6 @@ onMounted(load)
 </script>
 
 <style scoped>
-.plugins-tips {
-  font-size: 13px;
-  color: #666;
-  margin: 0 0 16px;
-  line-height: 1.5;
-}
 .sku-card {
   margin-bottom: 20px;
 }
@@ -550,7 +638,14 @@ onMounted(load)
   align-items: center;
 }
 .sandbox-row {
-  margin: 12px 0 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0 16px;
+  padding: 8px 24px 0;
+  margin: 0;
+}
+.sandbox-row :deep(.el-form-item) {
+  margin-bottom: 12px;
 }
 .scope-tip {
   margin-bottom: 12px;

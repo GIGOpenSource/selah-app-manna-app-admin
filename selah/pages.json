@@ -11,19 +11,79 @@
 			"path": "pages/home/home",
 			"style": {
 				"navigationStyle": "custom",
-				"disableScroll": true
+				"disableScroll": true,
+				"backgroundColor": "#fbf8f2",
+				"backgroundColorTop": "#fbf8f2",
+				"backgroundColorBottom": "#fbf8f2",
+				"app-plus": {
+					"bounce": "none",
+					"scrollIndicator": "none",
+					"popGesture": "none",
+					"background": "transparent",
+					"safearea": {
+						"background": "transparent",
+						"bottom": {
+							"offset": "none"
+						}
+					}
+				}
 			}
 		},
 		{
 			"path": "pages/ai/ai",
 			"style": {
-				"navigationStyle": "custom"
+				"navigationStyle": "custom",
+				"disableScroll": true,
+				"backgroundColor": "#fbf8f2",
+				"backgroundColorTop": "#fbf8f2",
+				"backgroundColorBottom": "#fbf8f2",
+				"app-plus": {
+					"bounce": "none",
+					"scrollIndicator": "none",
+					"softinputMode": "adjustNothing",
+					"background": "#fbf8f2"
+				}
 			}
 		},
 		{
 			"path": "pages/profile/profile",
 			"style": {
-				"navigationStyle": "custom"
+				"navigationStyle": "custom",
+				"backgroundColor": "#ffffff",
+				"backgroundColorTop": "#ffffff",
+				"backgroundColorBottom": "#ffffff",
+				"app-plus": {
+					"bounce": "none",
+					"scrollIndicator": "none"
+				}
+			}
+		},
+		{
+			"path": "pages/selah-overlay/modal",
+			"style": {
+				"navigationStyle": "custom",
+				"backgroundColor": "#00000000",
+				"app-plus": {
+					"animationType": "fade-in",
+					"animationDuration": 200,
+					"background": "transparent",
+					"popGesture": "close",
+					"bounce": "none"
+				}
+			}
+		},
+		{
+			"path": "pages/selah-overlay/sheet",
+			"style": {
+				"navigationStyle": "custom",
+				"backgroundColor": "#00000000",
+				"app-plus": {
+					"animationType": "slide-in-bottom",
+					"animationDuration": 220,
+					"background": "transparent",
+					"popGesture": "close",
+					"bounce": "none"
+				}
 			}
 		}
 	],
@@ -36,62 +96,62 @@
 				{ "path": "onboarding/onboarding", "style": { "navigationStyle": "custom" } },
 				{ "path": "reminders/reminders", "style": { "navigationStyle": "custom" } },
 				{ "path": "alarm/alarm", "style": { "navigationStyle": "custom" } },
+				{ "path": "alarm/ring", "style": { "navigationStyle": "custom", "backgroundColor": "#00000000", "app-plus": { "background": "transparent", "animationType": "none", "popGesture": "none" } } },
 				{ "path": "prayer-lock/prayer-lock", "style": { "navigationStyle": "custom" } },
 				{ "path": "prayer-lock/apps", "style": { "navigationStyle": "custom" } },
 				{ "path": "login/login", "style": { "navigationStyle": "custom" } },
+				{ "path": "widgets/center", "style": { "navigationStyle": "custom" } },
 				{ "path": "widgets/widgets", "style": { "navigationStyle": "custom" } },
+				{ "path": "widgets/name", "style": { "navigationStyle": "custom", "app-plus": { "softinputMode": "adjustResize" } } },
+				{ "path": "widgets/refresh", "style": { "navigationStyle": "custom" } },
 				{ "path": "icons/icons", "style": { "navigationStyle": "custom" } },
 				{ "path": "compose/compose", "style": { "navigationStyle": "custom" } },
 				{ "path": "quiz/quiz", "style": { "navigationStyle": "custom" } },
 				{ "path": "quiz/play", "style": { "navigationStyle": "custom" } },
 				{ "path": "quiz/result", "style": { "navigationStyle": "custom" } },
 				{ "path": "watch/watch", "style": { "navigationStyle": "custom" } },
+				{ "path": "growth-pack/growth-pack", "style": { "navigationStyle": "custom" } },
 				{ "path": "widget-teaser/widget-teaser", "style": { "navigationStyle": "custom" } },
 				{ "path": "icon-teaser/icon-teaser", "style": { "navigationStyle": "custom" } },
 				{ "path": "checkin/checkin", "style": { "navigationStyle": "custom" } },
 				{ "path": "share/share", "style": { "navigationStyle": "custom" } },
 				{ "path": "vip/vip", "style": { "navigationStyle": "custom" } },
+				{ "path": "vip/plans", "style": { "navigationStyle": "custom" } },
 				{ "path": "topics/topics", "style": { "navigationStyle": "custom" } },
+				{ "path": "topics/mixes", "style": { "navigationStyle": "custom", "onReachBottomDistance": 160 } },
 				{ "path": "topics/detail", "style": { "navigationStyle": "custom" } },
+				{ "path": "explore/explore", "style": { "navigationStyle": "custom" } },
+				{ "path": "explore/follow", "style": { "navigationStyle": "custom" } },
+				{ "path": "explore/bible", "style": { "navigationStyle": "custom" } },
 				{ "path": "wallpaper/wallpaper", "style": { "navigationStyle": "custom" } },
 				{ "path": "settings/settings", "style": { "navigationStyle": "custom" } },
+				{ "path": "settings/account", "style": { "navigationStyle": "custom" } },
+				{ "path": "settings/muted", "style": { "navigationStyle": "custom" } },
 				{ "path": "legal/legal", "style": { "navigationStyle": "custom" } },
-				{ "path": "assets/assets", "style": { "navigationStyle": "custom" } }
+				{ "path": "assets/assets", "style": { "navigationStyle": "custom", "disableScroll": true, "backgroundColor": "#ffffff", "backgroundColorTop": "#ffffff", "backgroundColorBottom": "#ffffff", "app-plus": { "bounce": "none", "scrollIndicator": "none", "softinputMode": "adjustNothing", "background": "#ffffff" } } },
+				{ "path": "calendar/calendar", "style": { "navigationStyle": "custom" } }
 			]
 		}
 	],
-	"tabBar": {
-		"color": "#8a8a8a",
-		"selectedColor": "#191919",
-		"borderStyle": "white",
-		"backgroundColor": "#fbf8f2",
-		"list": [
-			{
-				"pagePath": "pages/home/home",
-				"text": "Home",
-				"iconPath": "static/tab/home.png",
-				"selectedIconPath": "static/tab/home-active.png"
-			},
-			{
-				"pagePath": "pages/ai/ai",
-				"text": "AI",
-				"iconPath": "static/tab/ai.png",
-				"selectedIconPath": "static/tab/ai-active.png"
-			},
-			{
-				"pagePath": "pages/profile/profile",
-				"text": "Me",
-				"iconPath": "static/tab/me.png",
-				"selectedIconPath": "static/tab/me-active.png"
-			}
-		]
-	},
 	"globalStyle": {
 		"navigationBarTextStyle": "black",
 		"navigationBarTitleText": "Selah",
 		"navigationBarBackgroundColor": "#fbf8f2",
 		"backgroundColor": "#fbf8f2",
-		"backgroundTextStyle": "dark"
+		"backgroundColorTop": "#fbf8f2",
+		"backgroundColorBottom": "#fbf8f2",
+		"backgroundTextStyle": "dark",
+		"app-plus": {
+			"bounce": "none",
+			"scrollIndicator": "none",
+			"background": "#fbf8f2",
+			"safearea": {
+				"background": "#fbf8f2",
+				"bottom": {
+					"offset": "none"
+				}
+			}
+		}
 	},
 	"easycom": {
 		"autoscan": true,

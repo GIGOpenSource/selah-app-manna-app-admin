@@ -37,11 +37,21 @@ export function apiDismissBindPrompt() {
 }
 
 /** 更新用户资料（昵称、兴趣、信仰、营销开关等） */
-export function apiUpdateProfile(params) {
-	return postRequest('/auth/update-profile/', params)
+export function apiUpdateProfile(params, other = {}) {
+	return postRequest('/auth/update-profile/', params, other)
 }
 
 /** 登出并失效服务端会话 */
 export function apiLogout() {
 	return postRequest('/auth/logout/', {})
+}
+
+/** 申请注销：进入 7 天冷静期，服务端踢全部会话 */
+export function apiDeleteAccount(params = {}, other = {}) {
+	return postRequest('/auth/delete-account/', params, { showLoading: true, ...other })
+}
+
+/** 冷静期内撤销注销 */
+export function apiCancelDelete(params = {}, other = {}) {
+	return postRequest('/auth/cancel-delete/', params, { showLoading: true, ...other })
 }

@@ -23,13 +23,13 @@
 		</view>
 
 		<view class="copy">
-			<text class="title">{{ screen.title }}</text>
-			<text v-if="screen.subtitle" class="subtitle">{{ screen.subtitle }}</text>
+			<text class="title">{{ displayTitle }}</text>
+			<text v-if="displaySubtitle" class="subtitle">{{ displaySubtitle }}</text>
 		</view>
 
 		<view class="footer">
 			<view class="cta" :class="{ disabled: busy }" @click="continueNext">
-				<text class="cta-text">{{ screen.cta_text || t('continue') }}</text>
+				<text class="cta-text">{{ displayCta }}</text>
 			</view>
 			<view
 				v-if="kind === 'push_nudge'"
@@ -52,13 +52,14 @@ import { onLoad } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
 import { apiInterstitial } from '@/api/content.js'
 import { getUser } from '@/utils/session.js'
-import { track } from '@/utils/analytics.js'
+import { logFirebaseEvent } from '@/utils/firebase.js'
 import { ensureLocalAsset } from '@/utils/assetCache.js'
 import { markInterstitialSeen } from '@/utils/vip.js'
 import { loadWithCache } from '@/utils/pageCache.js'
 import { interstitialCacheKey } from '@/utils/wallpaperCache.js'
 import { interstitialRevision } from '@/utils/bootstrap.js'
 import { runBusy } from '@/utils/tapLock.js'
+import { cmsText } from '@/utils/cmsI18n.js'
 
 const KIND_ICONS = {
 	personalize_intro: '/static/ui/ico-profile.svg',
@@ -67,6 +68,36 @@ const KIND_ICONS = {
 	devotion_custom: '/static/ui/ico-prayer.svg',
 	value_edu: '/static/ui/ico-star.svg',
 	trial_intro: '/static/ui/ico-vip.svg',
+}
+
+const KIND_I18N = {
+	personalize_intro: {
+		title: 'interstitial_personalize_intro_title',
+		subtitle: 'interstitial_personalize_intro_sub',
+		cta: 'continue',
+	},
+	prefs_intro: {
+		title: 'interstitial_prefs_intro_title',
+		cta: 'continue',
+	},
+	value_edu: {
+		title: 'interstitial_value_edu_title',
+		cta: 'continue',
+	},
+	devotion_custom: {
+		title: 'interstitial_devotion_custom_title',
+		cta: 'continue',
+	},
+	push_nudge: {
+		title: 'interstitial_push_nudge_title',
+		subtitle: 'interstitial_push_nudge_sub',
+		cta: 'interstitial_push_nudge_cta',
+	},
+	trial_intro: {
+		title: 'interstitial_trial_intro_title',
+		subtitle: 'interstitial_trial_intro_sub',
+		cta: 'continue',
+	},
 }
 
 const { t } = useI18n()
@@ -85,6 +116,24 @@ const screen = ref({
 const kindIcon = computed(() => KIND_ICONS[kind.value] || '/static/ui/ico-star.svg')
 /** 仅当运营上传了插画（非整页截图）时展示；空则用 kind 图标 */
 const illusSrc = computed(() => (screen.value.image_url || '').trim())
+
+const kindCopy = computed(() => KIND_I18N[kind.value] || {})
+const displayTitle = computed(() => {
+	const key = kindCopy.value.title
+	if (!key) return screen.value.title || ''
+	return cmsText(screen.value.title, key)
+})
+const displaySubtitle = computed(() => {
+	const key = kindCopy.value.subtitle
+	const raw = String(screen.value.subtitle || '').trim()
+	if (!key) return raw
+	if (!raw) return t(key)
+	return cmsText(raw, key)
+})
+const displayCta = computed(() => {
+	const key = kindCopy.value.cta || 'continue'
+	return cmsText(screen.value.cta_text, key) || t('continue')
+})
 
 onLoad((q) => {
 	kind.value = (q.kind || 'personalize_intro').trim()
@@ -135,10 +184,9 @@ function continueNext() {
 	if (busy.value) return
 	runBusy(async () => {
 		markInterstitialSeen(kind.value, screen.value.version)
-		track('interstitial_cta', {
-			kind: kind.value,
-			version: Number(screen.value.version || 1),
-		})
+		if (kind.value === 'trial_intro') {
+			try { logFirebaseEvent('premium_intro_continue_click') } catch (e) {}
+		}
 		leave()
 	}, { busy, cooldownMs: 800 })
 }
@@ -147,11 +195,6 @@ function skipNext() {
 	if (busy.value) return
 	runBusy(async () => {
 		markInterstitialSeen(kind.value, screen.value.version)
-		track('interstitial_cta', {
-			kind: kind.value,
-			version: Number(screen.value.version || 1),
-			skip: true,
-		})
 		leave()
 	}, { busy, cooldownMs: 800 })
 }
@@ -204,10 +247,9 @@ async function load() {
 	} catch (e) {
 		console.warn('interstitial load failed', e)
 	}
-	track('interstitial_view', {
-		kind: kind.value,
-		version: Number(screen.value.version || 1),
-	})
+	if (kind.value === 'trial_intro') {
+		try { logFirebaseEvent('premium_intro_show') } catch (e) {}
+	}
 	if (!(screen.value.title || '').trim()) {
 		markInterstitialSeen(kind.value, 1)
 		leave()

@@ -1,11 +1,10 @@
 /**
  * 更新 tabBar 文案（随语言切换）。
- * uni.setTabBarItem 仅在当前为 TabBar 页时可用；非 TabBar 页 / 冷启未就绪时入队，
- * 进入 Tab 页（如 hideNativeTabBar）时再冲刷。
- * index：0=home / 1=ai / 2=me，与 pages.json tabBar 顺序一致。
+ * 已去掉 pages.json 原生 TabBar（iOS 在 TabBar 下方必留白条），这些 API 在无 TabBar 时会被吞掉。
+ * index：0=home / 1=ai / 2=me。
  *
- * 主路径 UI 按 Figma 使用自定义 dock / 顶栏，运行时会 hideTabBar；
- * 仍保留 pages.json tabBar 以便 switchTab 路由可用。
+ * 注意：部分安卓（小米等）对 webview.setStyle / hideTabBar 会再次触发页面 onShow，
+ * 必须在同页生命周期内只执行一次铺满，否则会和业务 onShow 形成死循环。
  */
 
 const TAB_ROUTES = new Set([
@@ -16,6 +15,9 @@ const TAB_ROUTES = new Set([
 
 /** @type {null | ((key: string) => string)} */
 let pendingT = null
+/** 当前页已铺满时的 key；同 key 不再 hideTabBar / setStyle */
+let lastExpandKey = ''
+let expandTimers = []
 
 function currentRoute() {
 	const pages = getCurrentPages()
@@ -53,9 +55,97 @@ export function applyTabBarLocale(t) {
 	flushTabBarLocale()
 }
 
-/** 隐藏原生 TabBar（Home/AI/Profile 自定义导航时用）。 */
+function clearExpandTimers() {
+	while (expandTimers.length) {
+		clearTimeout(expandTimers.pop())
+	}
+}
+
+function expandKeyForCurrent() {
+	// #ifdef APP-PLUS
+	try {
+		if (typeof plus === 'undefined') return ''
+		const pages = getCurrentPages()
+		const page = pages[pages.length - 1]
+		if (!page) return ''
+		const wv = (typeof page.$getAppWebview === 'function' && page.$getAppWebview())
+			|| (page.$vm && page.$vm.$scope && typeof page.$vm.$scope.$getAppWebview === 'function' && page.$vm.$scope.$getAppWebview())
+			|| (page.$scope && typeof page.$scope.$getAppWebview === 'function' && page.$scope.$getAppWebview())
+			|| plus.webview.currentWebview()
+		if (!wv) return currentRoute() || 'unknown'
+		const info = uni.getSystemInfoSync?.() || {}
+		const h = Number(info.screenHeight) || Number(plus.screen && plus.screen.resolutionHeight) || 0
+		const route = currentRoute() || 'unknown'
+		const wid = wv.id != null ? String(wv.id) : (wv.__uuid__ != null ? String(wv.__uuid__) : 'cur')
+		return `${route}|${wid}|${h}`
+	} catch (e) {
+		return currentRoute() || 'unknown'
+	}
+	// #endif
+	// #ifndef APP-PLUS
+	return currentRoute() || 'unknown'
+	// #endif
+}
+
+/**
+ * hideTabBar 后 App 仍常按 TabBar 高度排 webview，底部留一条系统白边。
+ * 把当前 Tab 页铺回整屏。标记先写再 setStyle，避免同步回调重入。
+ */
+function expandTabWebview() {
+	// #ifdef APP-PLUS
+	try {
+		if (typeof plus === 'undefined') return false
+		const pages = getCurrentPages()
+		const page = pages[pages.length - 1]
+		if (!page) return false
+		const wv = (typeof page.$getAppWebview === 'function' && page.$getAppWebview())
+			|| (page.$vm && page.$vm.$scope && typeof page.$vm.$scope.$getAppWebview === 'function' && page.$vm.$scope.$getAppWebview())
+			|| (page.$scope && typeof page.$scope.$getAppWebview === 'function' && page.$scope.$getAppWebview())
+			|| plus.webview.currentWebview()
+		if (!wv || typeof wv.setStyle !== 'function') return false
+		const key = expandKeyForCurrent()
+		if (!key || lastExpandKey === key) return false
+		lastExpandKey = key
+		const info = uni.getSystemInfoSync?.() || {}
+		const h = Number(info.screenHeight) || Number(plus.screen && plus.screen.resolutionHeight)
+		const style = { top: 0, bottom: 0 }
+		if (h) style.height = h
+		wv.setStyle(style)
+		return true
+	} catch (e) {
+		return false
+	}
+	// #endif
+	// #ifndef APP-PLUS
+	return false
+	// #endif
+}
+
+/** 隐藏原生 TabBar / 铺满 webview（Home/AI/Profile 自定义导航时用）。 */
 export function hideNativeTabBar() {
 	flushTabBarLocale()
-	if (!isTabBarPage()) return
-	safeCall(() => uni.hideTabBar({ animation: false }))
+	// #ifdef H5
+	if (typeof document !== 'undefined') {
+		document.documentElement.classList.add('selah-hide-tabbar')
+	}
+	// #endif
+
+	const key = expandKeyForCurrent()
+	if (key && lastExpandKey === key) return
+
+	safeCall(() => uni.hideTabBar({
+		animation: false,
+		success: expandTabWebview,
+		complete: expandTabWebview,
+	}))
+	expandTabWebview()
+	// #ifdef APP-PLUS
+	clearExpandTimers()
+	expandTimers.push(setTimeout(() => {
+		if (expandKeyForCurrent() !== lastExpandKey) expandTabWebview()
+	}, 50))
+	expandTimers.push(setTimeout(() => {
+		if (expandKeyForCurrent() !== lastExpandKey) expandTabWebview()
+	}, 300))
+	// #endif
 }

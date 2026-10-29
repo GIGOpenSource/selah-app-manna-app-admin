@@ -13,7 +13,9 @@ export function setNavTitle(title) {
 
 const TAB_URLS = [
 	'/pages/home/home',
-	'/pages/ai/ai',
+	'/pages/quiz/quiz',
+	'/pages/devotion/list',
+	'/pages/bible/bible',
 	'/pages/profile/profile',
 ]
 

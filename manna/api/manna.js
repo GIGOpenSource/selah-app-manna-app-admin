@@ -2,6 +2,7 @@
  * Manna 经济 / Home / Me / 祷告 / 收藏 API
  */
 import { getRequest, postRequest } from '@/utils/http.js'
+import { withTz } from '@/utils/device.js'
 
 /** 当前用户 Manna 余额 */
 export function apiMannaBalance(params = {}, other = {}) {
@@ -25,17 +26,17 @@ export function apiMannaStats(params = {}, other = {}) {
 
 /** 活动日历月条 */
 export function apiMannaCalendar(params = {}, other = {}) {
-	return getRequest('/manna/calendar/', params, { showLoading: false, ...other })
+	return getRequest('/manna/calendar/', withTz(params), { showLoading: false, ...other })
 }
 
 /** 单日活动 */
 export function apiMannaCalendarDay(params = {}, other = {}) {
-	return getRequest('/manna/calendar-day/', params, { showLoading: false, ...other })
+	return getRequest('/manna/calendar-day/', withTz(params), { showLoading: false, ...other })
 }
 
 /** 活动心跳 */
 export function apiMannaActivityPing(params = {}, other = {}) {
-	return postRequest('/manna/activity-ping/', params, { showLoading: false, ...other })
+	return postRequest('/manna/activity-ping/', withTz(params), { showLoading: false, ...other })
 }
 
 /** 徽章列表 */
@@ -78,14 +79,24 @@ export function apiMannaSharePayload(params = {}, other = {}) {
 	return getRequest('/manna/share-payload/', params, { showLoading: false, ...other })
 }
 
+/**
+ * 经文卡保存（制作卡片点对勾）
+ * TODO: 与后端对齐路径与字段后，将 pagesA/share/versecard.vue 中
+ * VERSECARD_SAVE_API_READY 改为 true。
+ * 预期入参示例：{ text, ref, theme_key, bg, brand, translation?, book_key?, chapter?, verse? }
+ */
+export function apiMannaVerseCardSave(params = {}, other = {}) {
+	return postRequest('/manna/verse-cards/', params, { showLoading: false, ...other })
+}
+
 /** Home 运营卡（2.0） */
 export function apiMannaHomeCards(params = {}, other = {}) {
-	return getRequest('/manna/home/cards/', params, { showLoading: false, ...other })
+	return getRequest('/manna/home/cards/', withTz(params), { showLoading: false, ...other })
 }
 
 /** 成长卡 */
 export function apiMannaStatsCard(params = {}, other = {}) {
-	return getRequest('/manna/stats/card/', params, { showLoading: false, ...other })
+	return getRequest('/manna/stats/card/', withTz(params), { showLoading: false, ...other })
 }
 
 /** Testimony */

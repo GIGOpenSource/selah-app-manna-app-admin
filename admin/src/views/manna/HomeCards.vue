@@ -14,22 +14,36 @@
       </div>
     </div>
     <el-table :data="rows" v-loading="loading">
+      <el-table-column label="封面" width="72">
+        <template #default="{ row }">
+          <el-image
+            v-if="row.cover_url"
+            class="table-td-thumb"
+            :src="row.cover_url"
+            :preview-src-list="[row.cover_url]"
+            preview-teleported
+            fit="cover"
+            hide-on-error
+          />
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="title" label="标题" min-width="140" />
       <el-table-column prop="subtitle" label="副标题" min-width="180" show-overflow-tooltip />
       <el-table-column label="跳转页面" min-width="160">
         <template #default="{ row }">{{ routeLabel(row.link_path) }}</template>
       </el-table-column>
-      <el-table-column prop="app_key" label="App名" width="90">
-        <template #default="{ row }">{{ row.app_key || '全部' }}</template>
+      <el-table-column prop="app_key" label="App名" min-width="110" width="110">
+        <template #default="{ row }">{{ row.app_key || '空维' }}</template>
       </el-table-column>
-      <el-table-column prop="language" label="语言" width="90">
+      <el-table-column prop="language" label="语言" min-width="100" width="100">
         <template #default="{ row }">{{ row.language ? langOptionLabel(row.language) : '全部' }}</template>
       </el-table-column>
-      <el-table-column prop="platform" label="设备" width="90">
+      <el-table-column prop="platform" label="设备" min-width="100" width="100">
         <template #default="{ row }">{{ platformLabel(row.platform) }}</template>
       </el-table-column>
-      <el-table-column prop="sort_order" label="排序" width="70" />
-      <el-table-column prop="enabled" label="启用" width="80">
+      <el-table-column prop="sort_order" label="排序" min-width="80" width="80" />
+      <el-table-column prop="enabled" label="启用" min-width="90" width="90">
         <template #default="{ row }">
           <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '是' : '否' }}</el-tag>
         </template>
@@ -58,6 +72,39 @@
         <el-form-item label="副标题">
           <el-input v-model="form.subtitle" maxlength="255" placeholder="如 Grow with leveled questions" />
         </el-form-item>
+        <el-form-item label="封面">
+          <div class="cover-field">
+            <el-upload
+              class="cover-uploader"
+              :show-file-list="false"
+              :auto-upload="false"
+              accept="image/*"
+              :on-change="onUploadCover"
+            >
+              <div v-if="form.cover_url" class="cover-preview">
+                <img :src="form.cover_url" alt="cover" />
+                <div class="cover-preview__mask">点击更换</div>
+              </div>
+              <el-button v-else type="primary" plain :loading="uploading">上传封面</el-button>
+            </el-upload>
+            <div class="cover-actions">
+              <el-button
+                v-if="form.cover_url"
+                size="small"
+                :loading="uploading"
+                @click="triggerCoverPick"
+              >重新上传</el-button>
+              <el-button
+                v-if="form.cover_url"
+                size="small"
+                type="danger"
+                plain
+                @click="form.cover_url = ''"
+              >清除</el-button>
+            </div>
+            <p class="field-hint">上传卡片图标 / 封面图到 COS，可留空。</p>
+          </div>
+        </el-form-item>
         <el-form-item label="跳转页面" required>
           <el-select v-model="form.link_path" filterable style="width: 100%" @change="onRouteChange">
             <el-option
@@ -70,13 +117,7 @@
         </el-form-item>
         <el-form-item v-if="selectedRoute?.needsId" label="详情 ID">
           <el-input-number v-model="form.target_id" :min="0" controls-position="right" />
-          <span class="field-hint">{{ selectedRoute.idHint || '写入 payload，客户端拼到 ?id=' }}</span>
-        </el-form-item>
-        <el-form-item label="App名">
-          <el-select v-model="form.app_key" filterable style="width: 100%">
-            <el-option label="全局（两 App 可见）" value="" />
-            <el-option v-for="a in APP_KEYS" :key="a" :label="a" :value="a" />
-          </el-select>
+          <span class="inline-hint">{{ selectedRoute.idHint || '写入 payload，客户端拼到 ?id=' }}</span>
         </el-form-item>
         <el-form-item label="语言">
           <el-select v-model="form.language" style="width: 100%">
@@ -114,11 +155,10 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CirclePlusFilled } from '@element-plus/icons-vue'
-import { fetchMannaHomeCards, saveMannaHomeCard } from '../../api'
+import { fetchMannaHomeCards, saveMannaHomeCard, uploadFile } from '../../api'
 import ScopeFilter from '../../components/ScopeFilter.vue'
-import { browseScopeParams } from '../../utils/scopeParams'
+import { browseScopeParams, defaultCreateAppKey } from '../../utils/scopeParams'
 import {
-  APP_KEYS,
   LANG_OPTIONS,
   langOptionLabel,
   MANNA_APP_ROUTE_OPTIONS,
@@ -134,6 +174,7 @@ const total = ref(0)
 const loading = ref(false)
 const visible = ref(false)
 const form = ref({})
+const uploading = ref(false)
 
 const selectedRoute = computed(() => mannaRouteByPath(form.value.link_path))
 
@@ -189,6 +230,28 @@ function onRouteChange(path) {
   if (!hit?.needsId) form.value.target_id = undefined
 }
 
+async function onUploadCover(file) {
+  const raw = file?.raw
+  if (!raw) return
+  uploading.value = true
+  try {
+    const res = await uploadFile(raw, 'manna/home-cards')
+    const url = res.results?.url || res.data?.url || res?.url || ''
+    if (!url) throw new Error('未返回 URL')
+    form.value.cover_url = url
+    ElMessage.success('封面已上传，请点保存')
+  } catch (e) {
+    ElMessage.error(e.message || e.msg || '上传失败')
+  } finally {
+    uploading.value = false
+  }
+}
+
+function triggerCoverPick() {
+  const input = document.querySelector('.cover-uploader input[type="file"]')
+  if (input) input.click()
+}
+
 function open(row) {
   if (row) {
     form.value = {
@@ -209,7 +272,7 @@ function open(row) {
       sort_order: 0,
       enabled: true,
       active_date: null,
-      app_key: appKey.value || 'manna',
+      app_key: defaultCreateAppKey(),
       language: language.value || '',
       platform: platform.value || '',
     }
@@ -251,7 +314,7 @@ async function save() {
       sort_order: form.value.sort_order ?? 0,
       enabled: !!form.value.enabled,
       active_date: form.value.active_date || null,
-      app_key: form.value.app_key ?? '',
+      app_key: defaultCreateAppKey(),
       language: form.value.language ?? '',
       platform: form.value.platform ?? '',
     })
@@ -280,5 +343,44 @@ onMounted(load)
 
 <style scoped>
 .plugins-tips { margin: 0 0 12px; color: #666; font-size: 13px; line-height: 1.5; }
-.field-hint { margin-left: 12px; color: #999; font-size: 12px; }
+.field-hint { margin: 6px 0 0; color: #999; font-size: 12px; line-height: 1.4; }
+.inline-hint { margin-left: 12px; color: #999; font-size: 12px; }
+.muted { color: #999; font-size: 12px; }
+.table-td-thumb { width: 48px; height: 48px; border-radius: 6px; }
+.cover-field { width: 100%; }
+.cover-preview {
+  position: relative;
+  width: 120px;
+  height: 72px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #ebeef5;
+  cursor: pointer;
+}
+.cover-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cover-preview__mask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 13px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.cover-preview:hover .cover-preview__mask {
+  opacity: 1;
+}
+.cover-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
 </style>

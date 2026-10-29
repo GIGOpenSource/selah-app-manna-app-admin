@@ -54,19 +54,19 @@
       <el-table-column prop="title" label="标题" width="140" />
       <el-table-column prop="subtitle" label="副标题" />
       <el-table-column prop="cta_text" label="按钮文案" width="100" />
-      <el-table-column prop="version" label="版本" width="70" />
-      <el-table-column prop="app_key" label="App" width="90">
-        <template #default="{ row }">{{ row.app_key || '全部' }}</template>
+      <el-table-column v-if="showPlat" prop="version" label="版本" width="70" />
+      <el-table-column prop="app_key" label="App" min-width="110" width="110">
+        <template #default="{ row }">{{ row.app_key || '空维' }}</template>
       </el-table-column>
-      <el-table-column prop="language" label="语言" width="80">
+      <el-table-column prop="language" label="语言" min-width="100" width="100">
         <template #default="{ row }">{{ row.language || '全部' }}</template>
       </el-table-column>
-      <el-table-column prop="platform" label="设备" width="90">
+      <el-table-column v-if="showPlat" prop="platform" label="设备" min-width="100" width="100">
         <template #default="{ row }">{{ row.platform || '全部' }}</template>
       </el-table-column>
       <el-table-column prop="priority" label="优先级" width="80" />
-      <el-table-column prop="sort_order" label="排序" width="70" />
-      <el-table-column prop="enabled" label="启用" width="80">
+      <el-table-column prop="sort_order" label="排序" min-width="80" width="80" />
+      <el-table-column prop="enabled" label="启用" min-width="90" width="90">
         <template #default="{ row }">
           <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '是' : '否' }}</el-tag>
         </template>
@@ -116,27 +116,10 @@
         <el-form-item label="标题"><el-input v-model="form.title" placeholder="Selah" /></el-form-item>
         <el-form-item label="副标题"><el-input v-model="form.subtitle" placeholder="Grow closer to God" /></el-form-item>
         <el-form-item label="按钮文案"><el-input v-model="form.cta_text" placeholder="Continue" /></el-form-item>
-        <el-form-item label="版本">
-          <el-input-number v-model="form.version" :min="1" />
-          <span class="hint">上调后已看过的用户会再看一次</span>
-        </el-form-item>
-        <el-form-item label="App">
-          <el-select v-model="form.app_key" filterable style="width: 100%">
-            <el-option label="全局（两 App 可见）" value="" />
-            <el-option v-for="a in APP_KEYS" :key="a" :label="a" :value="a" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="语言">
           <el-select v-model="form.language" filterable style="width: 100%">
             <el-option label="全部语言" value="" />
             <el-option v-for="l in LANG_OPTIONS" :key="l.value" :label="l.label" :value="l.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="设备">
-          <el-select v-model="form.platform" style="width: 100%">
-            <el-option label="全部" value="" />
-            <el-option label="iOS" value="ios" />
-            <el-option label="Android" value="android" />
           </el-select>
         </el-form-item>
         <el-form-item label="优先级">
@@ -164,7 +147,8 @@ import { fetchInterstitialScreens, saveInterstitialScreen, uploadFile, fetchCont
 import ScopeFilter from '../components/ScopeFilter.vue'
 import { loadWithCache, clearPageCache } from '../utils/pageCache'
 import { browseScopeParams, defaultCreateAppKey } from '../utils/scopeParams'
-import { INTERSTITIAL_KIND_ZH, labelZh, APP_KEYS, LANG_OPTIONS } from '../utils/enumZh'
+import { INTERSTITIAL_KIND_ZH, labelZh, LANG_OPTIONS } from '../utils/enumZh'
+import { shouldHidePlatform } from '../utils/productContext'
 
 const appKey = ref('')
 const language = ref('')
@@ -178,6 +162,7 @@ const loading = ref(false)
 const visible = ref(false)
 const form = ref({})
 const uploading = ref(false)
+const showPlat = !shouldHidePlatform()
 
 function kindZh(kind) {
   return labelZh(INTERSTITIAL_KIND_ZH, kind)
@@ -280,7 +265,11 @@ async function save() {
     return
   }
   try {
-    await saveInterstitialScreen(form.value)
+    await saveInterstitialScreen({
+      ...form.value,
+      app_key: defaultCreateAppKey(appKey.value),
+      platform: '',
+    })
     ElMessage.success('已保存')
     visible.value = false
     clearPageCache(cacheKey())

@@ -52,44 +52,68 @@
       "title": "What themes speak to you?",
       "options": [
         {
-          "label": "Prayer",
-          "value": "prayer"
-        },
-        {
-          "label": "Family",
-          "value": "family"
-        },
-        {
-          "label": "Anxiety Relief",
-          "value": "anxiety"
-        },
-        {
-          "label": "Gratitude",
-          "value": "gratitude"
-        },
-        {
-          "label": "Courage",
-          "value": "courage"
-        },
-        {
-          "label": "Work & Purpose",
-          "value": "work"
-        },
-        {
           "label": "Peace",
-          "value": "peace"
+          "value": "Peace"
         },
         {
           "label": "Hope",
-          "value": "hope"
+          "value": "Hope"
         },
         {
-          "label": "Relationships",
-          "value": "relationships"
+          "label": "Faith",
+          "value": "Faith"
+        },
+        {
+          "label": "Strength",
+          "value": "Strength"
+        },
+        {
+          "label": "Love",
+          "value": "Love"
         },
         {
           "label": "Healing",
-          "value": "healing"
+          "value": "Healing"
+        },
+        {
+          "label": "Gratitude",
+          "value": "Gratitude"
+        },
+        {
+          "label": "Guidance",
+          "value": "Guidance"
+        },
+        {
+          "label": "Growth",
+          "value": "Growth"
+        },
+        {
+          "label": "Prayer",
+          "value": "Prayer"
+        },
+        {
+          "label": "Self-Worth",
+          "value": "Self-Worth"
+        },
+        {
+          "label": "Family",
+          "value": "Family"
+        },
+        {
+          "label": "Anxiety Relief",
+          "value": "Anxiety Relief"
+        },
+        {
+          "label": "Courage",
+          "value": "Courage"
+        },
+        {
+          "label": "Work & Purpose",
+          "value": "Work & Purpose"
+        },
+        {
+          "label": "Relationships",
+          "value": "Relationships"
         }
       ],
       "sort_order": 30

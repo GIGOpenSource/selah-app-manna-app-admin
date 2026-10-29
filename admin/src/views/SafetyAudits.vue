@@ -34,7 +34,7 @@
 
       <el-table :data="rows" v-loading="loading">
         <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column label="App" width="90">
+        <el-table-column label="App" min-width="110" width="110">
           <template #default="{ row }">
             <el-tag v-if="row.app_key" size="small" :type="row.app_key === 'manna' ? 'warning' : 'primary'">
               {{ row.app_key }}

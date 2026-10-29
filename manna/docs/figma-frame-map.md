@@ -39,6 +39,13 @@
 | 994:2328 | 收藏 | pagesA/profile/collections | Me | 齐 2026-08-10 |
 | 994:2703 | 故事卡 | story-learn 卡片流 | 学习页 | 齐 2026-08-10 |
 | — | Welcome/Login/Settings/Legal | pagesA/* | 启动/设置 | 自拟 |
+| — | Onboarding | pagesA/onboarding/onboarding | 冷启有问卷时 | 自拟 |
+| — | Quiz 枢纽故事列表 | pagesA/quiz/stories | Quiz 页入口 | 齐（列表壳） |
+| — | Quiz Review | pagesA/quiz/review | 失败页 Review | 自拟 |
+| — | 祷告结果 | pagesA/prayer/result | Amen / 灵修 complete | 齐（与稿奖励页同构） |
+| — | Ledger | pagesA/profile/ledger | 点余额 | 自拟 |
+| — | Bible Hub / 笔记 / 高亮 | pagesA/profile/bible-hub · notes · highlights | Me → Bible | 自拟 |
+| — | VIP / Interstitial | pagesA/vip · interstitial | Me / 冷启 | 自拟 |
 | — | Badges | pagesA/profile/badges | Me 菜单 | 齐 2026-08-10（无独立稿） |
 
 更新约定：每贴齐一帧将状态改为 `齐` 并注明日期。演示内容以库内数据为准，不再标「demo」作主路径。

@@ -7,7 +7,13 @@ import Login from '../views/Login.vue'
 import Layout from '../views/Layout.vue'
 import Quotes from '../views/Quotes.vue'
 import ColdStart from '../views/ColdStart.vue'
+import RecommendStrategies from '../views/RecommendStrategies.vue'
+import FestivalCalendars from '../views/FestivalCalendars.vue'
+import TagAdjacencies from '../views/TagAdjacencies.vue'
+import RecommendSnapshots from '../views/RecommendSnapshots.vue'
+import PoolRankConfig from '../views/PoolRankConfig.vue'
 import Configs from '../views/Configs.vue'
+import Features from '../views/Features.vue'
 import BrandLegal from '../views/BrandLegal.vue'
 import AiProvider from '../views/AiProvider.vue'
 import Rewards from '../views/Rewards.vue'
@@ -27,6 +33,10 @@ import MembershipProducts from '../views/MembershipProducts.vue'
 import Orders from '../views/Orders.vue'
 import Dashboard from '../views/Dashboard.vue'
 import ContentReports from '../views/ContentReports.vue'
+import PushCopies from '../views/PushCopies.vue'
+import PushCampaigns from '../views/PushCampaigns.vue'
+import PushLogs from '../views/PushLogs.vue'
+import WidgetCards from '../views/WidgetCards.vue'
 import SafetyAudits from '../views/SafetyAudits.vue'
 import UserAffirmations from '../views/UserAffirmations.vue'
 import UserCollections from '../views/UserCollections.vue'
@@ -44,6 +54,8 @@ import MannaTestimonies from '../views/manna/Testimonies.vue'
 import MannaStatsCopies from '../views/manna/StatsCopies.vue'
 import MannaTags from '../views/manna/Tags.vue'
 import MannaLedger from '../views/manna/Ledger.vue'
+import TagLibrary from '../views/TagLibrary.vue'
+import DisplayTags from '../views/DisplayTags.vue'
 import { useAuthStore } from '../store/auth'
 
 const routes = [
@@ -55,11 +67,23 @@ const routes = [
       { path: '', redirect: '/dashboard' },
       { path: 'dashboard', name: 'dashboard', component: Dashboard, meta: { title: '数据看板', perm: 'ops' } },
       { path: 'quotes', name: 'quotes', component: Quotes, meta: { title: '语录', perm: 'content' } },
-      { path: 'cold-start', name: 'cold-start', component: ColdStart, meta: { title: '冷启池', perm: 'content' } },
+      { path: 'tag-library', name: 'tag-library', component: TagLibrary, meta: { title: '隐性标签', perm: 'content' } },
+      { path: 'display-tags', name: 'display-tags', component: DisplayTags, meta: { title: '显性标签', perm: 'content' } },
+      { path: 'cold-start', name: 'cold-start', component: ColdStart, meta: { title: '首页推荐', perm: 'content' } },
+      { path: 'recommend-strategies', name: 'recommend-strategies', component: RecommendStrategies, meta: { title: '命中策略', perm: 'content' } },
+      { path: 'festival-calendars', name: 'festival-calendars', component: FestivalCalendars, meta: { title: '节日日历', perm: 'content' } },
+      { path: 'tag-adjacencies', name: 'tag-adjacencies', component: TagAdjacencies, meta: { title: '相邻标签', perm: 'content' } },
+      { path: 'recommend-snapshots', name: 'recommend-snapshots', component: RecommendSnapshots, meta: { title: '推荐快照', perm: 'content' } },
+      { path: 'pool-rank', name: 'pool-rank', component: PoolRankConfig, meta: { title: '同池排序', perm: 'content' } },
       { path: 'topics', name: 'topics', component: Topics, meta: { title: '主题', perm: 'content' } },
       { path: 'wallpapers', name: 'wallpapers', component: Wallpapers, meta: { title: '壁纸', perm: 'content' } },
+      { path: 'bible', name: 'bible', component: MannaBible, meta: { title: '圣经译本', perm: 'content' } },
       { path: 'quizzes', name: 'quizzes', component: Quizzes, meta: { title: 'Selah 测验', perm: 'content' } },
       { path: 'content-reports', name: 'content-reports', component: ContentReports, meta: { title: '内容举报', perm: 'content' } },
+      // 远程 PUSH：全员可进；push_ops 仅作审核人角色，不在此鉴权
+      { path: 'push-copies', name: 'push-copies', component: PushCopies, meta: { title: '日常 PUSH 文案库' } },
+      { path: 'push-campaigns', name: 'push-campaigns', component: PushCampaigns, meta: { title: '运营 PUSH' } },
+      { path: 'push-logs', name: 'push-logs', component: PushLogs, meta: { title: 'PUSH 记录' } },
       { path: 'app-icons', name: 'app-icons', component: AppIcons, meta: { title: 'App图标', perm: 'ops' } },
       { path: 'manna/daily-verses', name: 'manna-daily-verses', component: MannaDailyVerses, meta: { title: '今日经文', perm: 'content' } },
       { path: 'manna/home-cards', name: 'manna-home-cards', component: MannaHomeCards, meta: { title: 'Home 运营卡', perm: 'content' } },
@@ -77,6 +101,8 @@ const routes = [
       { path: 'ai-provider', name: 'ai-provider', component: AiProvider, meta: { title: 'AI 模型', perm: 'ops' } },
       { path: 'brand-legal', name: 'brand-legal', component: BrandLegal, meta: { title: '品牌与法务', perm: 'ops' } },
       { path: 'rewards', name: 'rewards', component: Rewards, meta: { title: '签到/额度', perm: 'ops' } },
+      { path: 'widget-cards', name: 'widget-cards', component: WidgetCards, meta: { title: '小组件配置', perm: 'content' } },
+      { path: 'features', name: 'features', component: Features, meta: { title: '功能开关', perm: 'ops' } },
       { path: 'configs', name: 'configs', component: Configs, meta: { title: '其他配置', perm: 'ops' } },
       { path: 'onboarding', name: 'onboarding', component: Onboarding, meta: { title: '引导问卷', perm: 'ops' } },
       { path: 'welcome', name: 'welcome', component: Welcome, meta: { title: '欢迎页', perm: 'ops' } },
@@ -84,7 +110,7 @@ const routes = [
       { path: 'safety', name: 'safety', component: Safety, meta: { title: '安全词/热线', perm: 'ops' } },
       { path: 'safety-audits', name: 'safety-audits', component: SafetyAudits, meta: { title: '安全审计', perm: 'ops' } },
       { path: 'quick-prompts', name: 'quick-prompts', component: QuickPrompts, meta: { title: 'AI 开场', perm: 'ops' } },
-      { path: 'affirmation-templates', name: 'affirmation-templates', component: AffirmationTemplates, meta: { title: '肯定语模板', perm: 'ops' } },
+      { path: 'affirmation-templates', name: 'affirmation-templates', component: AffirmationTemplates, meta: { title: '肯定语模板', perm: 'content' } },
       { path: 'membership-products', name: 'membership-products', component: MembershipProducts, meta: { title: '会员 SKU', perm: 'ops' } },
       { path: 'orders', name: 'orders', component: Orders, meta: { title: '订单管理', perm: 'ops' } },
       { path: 'app-users', name: 'app-users', component: AppUsers, meta: { title: 'App 用户', perm: 'app_users' } },
@@ -97,7 +123,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory('/admin'),
   routes,
 })
 
@@ -115,6 +141,14 @@ function firstAllowedPath(perms) {
   if (set.has('staff')) return '/staff-users'
   if (set.has('permissions')) return '/permissions'
   return '/login'
+}
+
+/** meta.perm 支持 string | string[]（满足其一即可） */
+function hasRoutePerm(need, perms) {
+  if (!need) return true
+  if (!perms?.length) return false
+  if (Array.isArray(need)) return need.some((p) => perms.includes(p))
+  return perms.includes(need)
 }
 
 /**
@@ -142,9 +176,15 @@ router.beforeEach((to, _from, next) => {
   if (!auth.permissions.length) auth.hydrateFromStorage()
   const perms = auth.permissions
   const need = to.meta.perm
-  // 有声明权限码、账号已加载权限、但不包含所需码 → 落到其能访问的首页
-  if (need && perms.length && !perms.includes(need)) {
-    next(firstAllowedPath(perms))
+  // 声明了权限码则必须命中；水合后仍为空视为无权限，不放行
+  if (need && !hasRoutePerm(need, perms)) {
+    const fallback = firstAllowedPath(perms)
+    // 避免同路径死循环（如无权限时 fallback 仍是当前页）
+    if (fallback === to.path) {
+      next('/login')
+      return
+    }
+    next(fallback)
     return
   }
   next()

@@ -9,12 +9,12 @@
 				<view class="tags__inner">
 					<view
 						v-for="tag in tags"
-						:key="tag"
+						:key="tag.key"
 						class="tag"
-						:class="{ 'tag--on': tag === activeTag }"
+						:class="{ 'tag--on': tag.key === activeTag }"
 						@click="onTag(tag)"
 					>
-						{{ tag }}
+						{{ tag.display_name || (tag.i18n ? t(tag.i18n) : tag.key) }}
 					</view>
 				</view>
 			</scroll-view>
@@ -27,7 +27,7 @@
 				enable-flex
 			>
 				<view class="page__list">
-					<view v-if="!seriesList.length && !loading" class="empty">{{ t('devotion_empty') }}</view>
+					<view v-if="!featured && !restList.length && !loading" class="empty">{{ activeTag === TAG_MINE ? t('devotion_mine_empty') : t('devotion_empty') }}</view>
 
 					<!-- 精选：大封面 + 课节预览（对齐稿） -->
 					<view
@@ -46,7 +46,7 @@
 							<view class="feat__grad" />
 							<view class="feat__meta">
 								<text class="feat__title">{{ featured.title }}</text>
-								<text class="feat__sub">{{ featured.session_count || 0 }} sessions</text>
+								<text class="feat__sub">{{ statusLabel(featured) }}</text>
 							</view>
 						</view>
 						<view
@@ -69,6 +69,7 @@
 						v-for="s in restList"
 						:key="s.id"
 						class="row"
+						:class="'row--' + (s.status || 'not_started')"
 						hover-class="row--press"
 						@click="openSeries(s)"
 					>
@@ -81,7 +82,7 @@
 						<view v-else class="row__thumb row__thumb--empty" />
 						<view class="row__body">
 							<text class="row__title">{{ s.title }}</text>
-							<text class="row__sub">{{ s.session_count || 0 }} sessions{{ s.locked ? ' · VIP' : '' }}</text>
+							<text class="row__sub">{{ statusLabel(s) }}</text>
 						</view>
 						<image class="row__chev" src="/static/ui/devotion/ico-chevron.svg" mode="aspectFit" />
 					</view>
@@ -91,7 +92,7 @@
 			</scroll-view>
 		</view>
 
-		<MannaTabBar v-if="tabOn" active="devotion" variant="light" />
+		<MannaTabBar v-show="tabOn" active="devotion" variant="light" />
 	</view>
 </template>
 
@@ -100,26 +101,33 @@ import { ref, computed, onMounted, nextTick, getCurrentInstance } from 'vue'
 import { onShow, onHide, onReady } from '@dcloudio/uni-app'
 import { t } from '@/i18n/index.js'
 import { ensureLogin } from '@/utils/session.js'
-import { apiDevotionSeries, apiDevotionSeriesDetail } from '@/api/devotion.js'
-import { withDemoSeriesList } from '@/utils/devotionDemo.js'
+import { apiDevotionSeries } from '@/api/devotion.js'
+import { apiBibleTags } from '@/api/bible.js'
 import { absolutizeMedia } from '@/utils/media.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
-import { hideNativeTabBar } from '@/utils/tabbar.js'
+import { hideNativeTabBar, scheduleCustomTabBarHide, setTabUiKey } from '@/utils/tabbar.js'
+import { track } from '@/utils/analytics.js'
 import MannaTabBar from '@/components/MannaTabBar.vue'
 
-const DEFAULT_TAGS = ['All', 'Family', 'Love', 'Anxiety', 'Healing', 'Hope']
+const TAG_ALL = 'All'
+const TAG_MINE = 'My Devotions'
+const PINNED_TAGS = [
+	{ key: TAG_ALL, i18n: 'devotion_all' },
+	{ key: TAG_MINE, i18n: 'devotion_mine' },
+]
 
 const statusBar = getStatusBarPx()
 const tabOn = ref(true)
-const tags = ref(DEFAULT_TAGS.slice())
-const activeTag = ref('All')
-const seriesList = ref([])
+let tabHideTimer = null
+const tags = ref(PINNED_TAGS.slice())
+const activeTag = ref(TAG_ALL)
+const featured = ref(null)
+const restList = ref([])
 const loading = ref(false)
 const scrollH = ref(0)
 const proxy = getCurrentInstance()?.proxy
+let loadSeq = 0
 
-const featured = computed(() => seriesList.value[0] || null)
-const restList = computed(() => seriesList.value.slice(1))
 const featuredPreviews = computed(() => {
 	const list = featured.value?.preview_sessions || []
 	return list.slice(0, 2)
@@ -155,50 +163,123 @@ function measureScroll() {
 }
 
 function onTag(tag) {
-	activeTag.value = tag
-	load()
+	const key = tag?.key || tag
+	if (!key) return
+	activeTag.value = key
+	load({ mask: true })
 }
 
-async function enrichFeaturedSessions(list) {
-	const first = list[0]
-	if (!first || !first.id || String(first.id).startsWith('demo-')) return list
-	if (first.preview_sessions?.length) return list
+function showTagLoading() {
 	try {
-		const res = await apiDevotionSeriesDetail({ id: first.id })
-		const sessions = res?.results?.sessions || []
-		if (sessions.length) {
-			first.preview_sessions = sessions.slice(0, 2).map((s) => ({
-				id: s.id,
-				title: s.title,
-				scripture_ref: s.scripture_ref || '',
-				completed: !!s.completed,
-			}))
-			if (!first.cover_url && res?.results?.cover_url) {
-				first.cover_url = res.results.cover_url
-			}
-		}
+		uni.showLoading({ title: t('loading'), mask: true })
 	} catch (e) {}
-	return list
 }
 
-async function load() {
+function hideTagLoading() {
+	try {
+		uni.hideLoading()
+	} catch (e) {}
+}
+
+function isContentTag(key) {
+	return !!(key && key !== TAG_ALL && key !== TAG_MINE)
+}
+
+function seriesDetailId(s) {
+	return s?.id
+}
+
+function parseSeriesPayload(res) {
+	const d = res?.results
+	if (Array.isArray(d)) {
+		return { featured: null, list: d.slice() }
+	}
+	const feat = d?.featured && typeof d.featured === 'object' ? d.featured : null
+	const list = Array.isArray(d?.list) ? d.list.slice() : []
+	const hasFeat = !!(feat && (feat.id || feat.title))
+	return { featured: hasFeat ? feat : null, list }
+}
+
+function parseApiTags(res) {
+	const raw = Array.isArray(res?.results)
+		? res.results
+		: Array.isArray(res?.data)
+			? res.data
+			: Array.isArray(res)
+				? res
+				: []
+	const seen = new Set()
+	return raw
+		.map((tg) => {
+			if (!tg || typeof tg !== 'object') return null
+			const key = String(tg.key || '').trim()
+			const display_name = String(tg.display_name || '').trim()
+			if (!key && !display_name) return null
+			return {
+				key: key || display_name,
+				display_name: display_name || key,
+				sort: Number(tg.sort_order) || 0,
+			}
+		})
+		.filter(Boolean)
+		.sort((a, b) => a.sort - b.sort)
+		.filter((tg) => {
+			const id = tg.key.toLowerCase()
+			if (seen.has(id) || id === 'all' || tg.key === TAG_ALL || tg.key === TAG_MINE) return false
+			seen.add(id)
+			return true
+		})
+		.map(({ key, display_name }) => ({ key, display_name }))
+}
+
+function statusLabel(s) {
+	const n = s.session_count || 0
+	const done = s.completed_count || 0
+	if (s.status === 'done') return `${t('devotion_status_done')} · ${n}`
+	if (s.status === 'in_progress') return `${t('devotion_status_mid')} · ${done}/${n}`
+	const base = t('devotion_sessions', { n })
+	return s.locked ? `${base} · ${t('devotion_vip_badge')}` : base
+}
+
+async function load({ mask = false } = {}) {
+	const seq = ++loadSeq
 	loading.value = true
+	if (mask) showTagLoading()
 	try {
 		const params = {}
-		if (activeTag.value && activeTag.value !== 'All') params.tag = activeTag.value
-		const res = await apiDevotionSeries(params)
-		let list = Array.isArray(res?.results) ? res.results.slice() : []
-		list = await enrichFeaturedSessions(list)
-		seriesList.value = list
-		const set = new Set(DEFAULT_TAGS)
-		list.forEach((s) => (s.tags || []).forEach((tg) => set.add(tg)))
-		tags.value = Array.from(set)
+		if (isContentTag(activeTag.value)) params.tag = activeTag.value
+		const [seriesRes, tagRes] = await Promise.all([
+			apiDevotionSeries(params),
+			apiBibleTags().catch(() => null),
+		])
+		if (seq !== loadSeq) return
+		tags.value = [...PINNED_TAGS, ...parseApiTags(tagRes)]
+		const parsed = parseSeriesPayload(seriesRes)
+		if (activeTag.value === TAG_MINE) {
+			featured.value = null
+			const all = [parsed.featured, ...parsed.list].filter(Boolean)
+			restList.value = all
+				.filter((s) => s.status === 'in_progress' || s.status === 'done')
+				.sort((a, b) => {
+					const ta = new Date(a.last_studied_at || a.updated_at || 0).getTime()
+					const tb = new Date(b.last_studied_at || b.updated_at || 0).getTime()
+					return tb - ta
+				})
+		} else {
+			featured.value = parsed.featured
+			restList.value = parsed.list
+		}
 	} catch (e) {
-		seriesList.value = withDemoSeriesList([])
-		tags.value = DEFAULT_TAGS.slice()
+		if (seq !== loadSeq) return
+		featured.value = null
+		restList.value = []
+		if (!tags.value.length) tags.value = PINNED_TAGS.slice()
 	} finally {
-		loading.value = false
-		measureScroll()
+		if (seq === loadSeq) {
+			loading.value = false
+			hideTagLoading()
+			measureScroll()
+		}
 	}
 }
 
@@ -207,7 +288,8 @@ function openSeries(s) {
 		uni.showToast({ title: t('devotion_vip_locked'), icon: 'none' })
 		return
 	}
-	uni.navigateTo({ url: `/pagesA/devotion/detail?id=${encodeURIComponent(s.id)}` })
+	const id = seriesDetailId(s)
+	uni.navigateTo({ url: `/pagesA/devotion/detail?id=${encodeURIComponent(id)}` })
 }
 
 function openPreview(series, session) {
@@ -217,7 +299,7 @@ function openPreview(series, session) {
 	}
 	if (session?.id && !String(session.id).startsWith('d') && !String(session.id).startsWith('demo')) {
 		uni.navigateTo({
-			url: `/pagesA/devotion/session?id=${session.id}&series_id=${series.id}`,
+			url: `/pagesA/devotion/session?id=${session.id}&series_id=${encodeURIComponent(seriesDetailId(series))}`,
 		})
 		return
 	}
@@ -228,6 +310,7 @@ onReady(() => measureScroll())
 
 onMounted(async () => {
 	tabOn.value = true
+	setTabUiKey('devotion')
 	hideNativeTabBar()
 	measureScroll()
 	try {
@@ -237,14 +320,24 @@ onMounted(async () => {
 })
 
 onShow(() => {
+	if (tabHideTimer) {
+		clearTimeout(tabHideTimer)
+		tabHideTimer = null
+	}
 	tabOn.value = true
+	setTabUiKey('devotion')
 	hideNativeTabBar()
 	measureScroll()
 	load()
+	track('page_view', { page_name: 'devotion' })
 })
 
 onHide(() => {
-	tabOn.value = false
+	tabHideTimer = scheduleCustomTabBarHide(() => {
+		tabOn.value = false
+		tabHideTimer = null
+	})
+	hideTagLoading()
 })
 </script>
 
@@ -283,7 +376,7 @@ onHide(() => {
 	padding: 8rpx 40rpx 16rpx;
 	font-family: $manna-font-body !important;
 	font-weight: 700;
-	font-size: 36rpx;
+	font-size: 40rpx;
 	color: #000;
 	flex-shrink: 0;
 }
@@ -406,7 +499,7 @@ onHide(() => {
 .feat__row {
 	display: flex;
 	align-items: center;
-	gap: 24rpx;
+	& > *:not(:first-child) { margin-left: 24rpx; }
 	padding: 16rpx 32rpx;
 }
 
@@ -451,7 +544,7 @@ onHide(() => {
 	box-shadow: $manna-shadow-card;
 	display: flex;
 	align-items: center;
-	gap: 24rpx;
+	& > *:not(:first-child) { margin-left: 24rpx; }
 	box-sizing: border-box;
 }
 
@@ -492,6 +585,10 @@ onHide(() => {
 	font-size: 28rpx;
 	color: rgba(33, 33, 33, 0.7);
 }
+
+.row--done { opacity: 0.72; }
+.row--in_progress .row__title { color: #195c1e; }
+.row--not_started { }
 
 .row__chev {
 	width: 44rpx;

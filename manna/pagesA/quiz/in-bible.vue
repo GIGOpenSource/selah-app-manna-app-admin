@@ -1,5 +1,5 @@
 <template>
-	<!-- Figma 664:1867 Quiz-InBible；成功空经文走空态，仅 catch 用 demo -->
+	<!-- Figma 664:1867 Quiz-InBible；空经文或失败走空态 -->
 	<view class="page" :style="{ paddingTop: statusBar + 'px' }">
 		<image class="page__bg" src="/static/ui/quiz/inbible/bg-openbook.png" mode="aspectFill" />
 		<view class="page__fade" />
@@ -10,7 +10,7 @@
 			</view>
 			<text class="nav__title">{{ levelTitle }}</text>
 			<view class="balance">
-				<image class="balance__ico" src="/static/ui/quiz/inbible/ico-manna.svg" mode="aspectFit" />
+				<image class="balance__ico" src="/static/ui/quiz/inbible/ico-manna.png" mode="aspectFit" />
 				<text class="balance__n">{{ balance }}</text>
 			</view>
 		</view>
@@ -18,12 +18,18 @@
 		<view class="sheet">
 			<view class="sheet__handle" @click="back" />
 			<text class="sheet__title">{{ bookName }} {{ chapter }}</text>
-			<scroll-view scroll-y class="sheet__scroll">
+			<scroll-view
+				scroll-y
+				class="sheet__scroll"
+				:scroll-into-view="anchor"
+				:scroll-with-animation="false"
+			>
 				<view
 					v-for="v in verses"
 					:key="v.verse"
+					:id="'v' + v.verse"
 					class="verse"
-					:class="{ 'verse--focus': v.verse === focusVerse }"
+					:class="{ 'verse--focus': inFocus(v.verse) }"
 				>
 					<text class="verse__n">{{ v.verse }}</text>
 					<text class="verse__t">{{ v.text }}</text>
@@ -39,22 +45,24 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { t } from '@/i18n/index.js'
 import { apiBibleChapter } from '@/api/bible.js'
 import { apiMannaBalance } from '@/api/manna.js'
-import { withDemoChapter, DEMO_IN_BIBLE } from '@/utils/bibleDemo.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
-
 const statusBar = getStatusBarPx()
 const bookKey = ref('romans')
 const bookName = ref('')
 const chapter = ref(1)
 const focusVerse = ref(1)
+// 经文区间终点（接口 bible_ref 可能给 verse_start/verse_end）
+const focusEnd = ref(1)
+// scroll-view 的滚动锚点，必须等经文渲染完再赋值才会生效
+const anchor = ref('')
 const verses = ref([])
 const balance = ref(0)
-const levelTitle = ref('Level 2')
+const levelTitle = ref(t('quiz_level_n', { n: 2 }))
 const attemptId = ref('')
 const loading = ref(false)
 
@@ -62,6 +70,8 @@ onLoad((q) => {
 	if (q?.book) bookKey.value = String(q.book)
 	if (q?.chapter) chapter.value = Number(q.chapter) || 1
 	if (q?.verse) focusVerse.value = Number(q.verse) || 1
+	focusEnd.value = Number(q?.end || q?.verse_end) || focusVerse.value
+	if (focusEnd.value < focusVerse.value) focusEnd.value = focusVerse.value
 	if (q?.name) bookName.value = decodeURIComponent(String(q.name))
 	if (q?.level) levelTitle.value = decodeURIComponent(String(q.level))
 	if (q?.attempt_id) attemptId.value = String(q.attempt_id)
@@ -76,9 +86,10 @@ onMounted(async () => {
 	loading.value = true
 	try {
 		const res = await apiBibleChapter({
-			translation: 'web',
+			translation: uni.getStorageSync('manna_bible_translation') || 'web',
 			book: bookKey.value,
 			chapter: chapter.value,
+			verse: focusVerse.value,
 		})
 		const d = res?.results || {}
 		if (d.book_name || d.book_title) bookName.value = d.book_name || d.book_title
@@ -88,19 +99,44 @@ onMounted(async () => {
 			verse: Number(v.verse) || i + 1,
 			text: v.text || v.content || '',
 		}))
+		ensureFocusInRange()
 	} catch (e) {
-		const d = withDemoChapter(null, {
-			...DEMO_IN_BIBLE,
-			book: bookKey.value,
-			chapter: chapter.value,
-			book_name: bookName.value || DEMO_IN_BIBLE.book_name,
-		})
-		bookName.value = bookName.value || d.book_name
-		verses.value = d.verses
+		verses.value = []
 	} finally {
 		loading.value = false
 	}
+	if (verses.value.length) scrollToFocus()
 })
+
+/** 焦点节是否落在高亮区间内 */
+function inFocus(n) {
+	return n >= focusVerse.value && n <= focusEnd.value
+}
+
+/** URL 里的节号若超出本章节数（书卷/章节传错或译本节数不同），回退到首节，避免整章看不到焦点 */
+function ensureFocusInRange() {
+	const list = verses.value
+	if (!list.length) return
+	const first = Number(list[0].verse) || 1
+	const last = Number(list[list.length - 1].verse) || first
+	if (focusVerse.value < first || focusVerse.value > last) {
+		console.warn('[in-bible] verse out of range', focusVerse.value, first, last)
+		focusVerse.value = first
+		focusEnd.value = first
+	}
+	if (focusEnd.value > last) focusEnd.value = last
+	if (focusEnd.value < focusVerse.value) focusEnd.value = focusVerse.value
+}
+
+/** scroll-into-view 必须在节点渲染完成后赋值；先清空再设，保证重复进入也能触发 */
+async function scrollToFocus() {
+	const id = `v${focusVerse.value}`
+	anchor.value = ''
+	await nextTick()
+	setTimeout(() => {
+		anchor.value = id
+	}, 50)
+}
 
 function goBible() {
 	try {
@@ -165,7 +201,7 @@ function back() {
 	display: flex;
 	align-items: center;
 	padding: 20rpx 40rpx;
-	gap: 8rpx;
+	& > *:not(:first-child) { margin-left: 8rpx; }
 }
 
 .nav__back {
@@ -180,15 +216,14 @@ function back() {
 
 .nav__title {
 	flex: 1;
-	font-weight: 700;
-	font-size: 36rpx;
+	@include manna-nav-title;
 	color: #000;
 }
 
 .balance {
 	display: flex;
 	align-items: center;
-	gap: 12rpx;
+	& > *:not(:first-child) { margin-left: 12rpx; }
 	padding: 16rpx 24rpx;
 	border-radius: 80rpx;
 	background: rgba(33, 33, 33, 0.5);
@@ -241,7 +276,7 @@ function back() {
 
 .verse {
 	display: flex;
-	gap: 16rpx;
+	& > *:not(:first-child) { margin-left: 16rpx; }
 	padding: 20rpx 8rpx;
 	opacity: 0.5;
 }
@@ -280,7 +315,7 @@ function back() {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	gap: 8rpx;
+	& > *:not(:first-child) { margin-left: 8rpx; }
 	padding: 16rpx 24rpx;
 	border-radius: 80rpx;
 	background: rgba(255, 255, 255, 0.5);

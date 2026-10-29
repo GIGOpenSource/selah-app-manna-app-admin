@@ -6,7 +6,7 @@
 
 ## 导出
 
-在 `fast_base/backend`：
+在 `backend`：
 
 ```bash
 ./uivsbe_env/bin/python scripts/export_manna_bootstrap.py
@@ -27,7 +27,7 @@ npm run export:bootstrap
 |---|---|
 | `app-config.json` | 品牌 / Manna 开关 / 登录标题副标题 / VIP 文案等（含 `revision`） |
 | `welcome.json` | Welcome 屏文案与 `version` |
-| `onboarding-questions.json` | `{ revision, questions }`（预留；冷启主路径暂跳过问卷） |
+| `onboarding-questions.json` | `{ revision, questions }`（冷启：CMS 有启用题且用户未 complete/skip 才进问卷页） |
 | `interstitials.json` | `{ kind: payload }`（VIP `trial_intro` 等） |
 | `manifest.json` | 导出版本索引（含 `app: manna` + scope） |
 

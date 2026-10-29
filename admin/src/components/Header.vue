@@ -1,14 +1,31 @@
 <!--
-  顶栏：折叠侧栏、全屏、当前账号与退出登录。
+  顶栏：折叠侧栏、切换 App、全屏、当前账号与退出登录。
 -->
 <template>
   <div class="header">
     <div class="header-left">
       <img class="logo" src="../assets/img/logo.svg" alt="" />
-      <div class="web-title">Selah 运营后台</div>
+      <div class="web-title">{{ titleText }}</div>
       <div class="collapse-btn" @click="collapseChange">
         <el-icon v-if="sidebar.collapse"><Expand /></el-icon>
         <el-icon v-else><Fold /></el-icon>
+      </div>
+      <div class="header-app">
+        <span class="header-app-label">切换 App</span>
+        <el-select
+          class="header-app-switch"
+          :model-value="currentAppKey"
+          size="small"
+          teleported
+          @update:model-value="onAppChange"
+        >
+          <el-option
+            v-for="opt in APP_SWITCH_OPTIONS"
+            :key="opt.value"
+            :label="opt.label"
+            :value="opt.value"
+          />
+        </el-select>
       </div>
     </div>
     <div class="header-right">
@@ -36,20 +53,52 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useSidebarStore } from '../store/sidebar'
 import { useTabsStore } from '../store/tabs'
 import { useAuthStore } from '../store/auth'
 import imgurl from '../assets/img/img.jpg'
+import {
+  APP_SWITCH_OPTIONS,
+  appLabel,
+  currentAppKey,
+  setCurrentAppKey,
+} from '../utils/productContext'
+import { landingPathForApp } from './menu'
 
 const router = useRouter()
+const route = useRoute()
 const sidebar = useSidebarStore()
 const tabs = useTabsStore()
 const auth = useAuthStore()
 
+const titleText = computed(() => `${appLabel(currentAppKey.value)} 运营后台`)
+
 function collapseChange() {
   sidebar.handleCollapse()
+}
+
+function syncCurrentTab(r) {
+  if (!r?.meta?.title) return
+  tabs.setTabsItem({
+    name: r.name,
+    title: r.meta.title,
+    path: r.fullPath,
+  })
+}
+
+function onAppChange(v) {
+  if (v === currentAppKey.value) return
+  const next = setCurrentAppKey(v)
+  tabs.clearTabs()
+  const target = landingPathForApp(next, route.path)
+  if (target !== route.path) {
+    router.push(target)
+    return
+  }
+  // 共用页（如 App 用户）路径不变，Tabs 收不到路由更新，需把当前标签重新挂上
+  syncCurrentTab(route)
 }
 
 onMounted(() => {
@@ -124,6 +173,40 @@ function setFullScreen() {
 
 .collapse-btn:hover {
   opacity: 1;
+}
+
+.header-app {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 8px;
+  height: 100%;
+}
+
+.header-app-label {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.65);
+  white-space: nowrap;
+}
+
+.header-app-switch {
+  width: 128px;
+}
+
+.header-app-switch :deep(.el-select__wrapper) {
+  min-height: 28px;
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+  color: #fff;
+}
+
+.header-app-switch :deep(.el-select__placeholder),
+.header-app-switch :deep(.el-select__selected-item) {
+  color: #fff;
+}
+
+.header-app-switch :deep(.el-select__caret) {
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .header-right {

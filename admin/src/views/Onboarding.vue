@@ -31,16 +31,16 @@
         </template>
       </el-table-column>
       <el-table-column prop="title" label="标题" />
-      <el-table-column prop="app_key" label="App" width="90">
-        <template #default="{ row }">{{ row.app_key || '全部' }}</template>
+      <el-table-column prop="app_key" label="App" min-width="110" width="110">
+        <template #default="{ row }">{{ row.app_key || '空维' }}</template>
       </el-table-column>
-      <el-table-column prop="language" label="语言" width="80">
+      <el-table-column prop="language" label="语言" min-width="100" width="100">
         <template #default="{ row }">{{ row.language || '全部' }}</template>
       </el-table-column>
-      <el-table-column prop="platform" label="设备" width="90">
+      <el-table-column v-if="showPlat" prop="platform" label="设备" min-width="100" width="100">
         <template #default="{ row }">{{ row.platform || '全部' }}</template>
       </el-table-column>
-      <el-table-column prop="sort_order" label="顺序" width="80" />
+      <el-table-column prop="sort_order" label="顺序" min-width="80" width="80" />
       <el-table-column label="选项" min-width="200">
         <template #default="{ row }">
           <div v-if="(row.options || []).length" class="opt-preview">
@@ -55,7 +55,7 @@
           <span v-else class="opt-empty">0</span>
         </template>
       </el-table-column>
-      <el-table-column prop="enabled" label="启用" width="80">
+      <el-table-column prop="enabled" label="启用" min-width="90" width="90">
         <template #default="{ row }">
           <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '是' : '否' }}</el-tag>
         </template>
@@ -90,21 +90,15 @@
           <div v-if="form.question_key" class="key-hint">{{ keyLabel(form.question_key) }} · 机器名勿随意改</div>
         </el-form-item>
         <el-form-item label="标题"><el-input v-model="form.title" /></el-form-item>
-        <el-form-item label="App">
-          <el-select v-model="form.app_key" filterable style="width: 100%">
-            <el-option label="全局（两 App 可见）" value="" />
-            <el-option v-for="a in APP_KEYS" :key="a" :label="a" :value="a" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="语言">
           <el-select v-model="form.language" filterable style="width: 100%">
-            <el-option label="全部语言" value="" />
+            <el-option label="全部语言" value="all" />
             <el-option v-for="l in LANG_OPTIONS" :key="l.value" :label="l.label" :value="l.value" />
           </el-select>
         </el-form-item>
-        <el-form-item label="设备">
+        <el-form-item v-if="showPlat" label="设备">
           <el-select v-model="form.platform" style="width: 100%">
-            <el-option label="全部设备" value="" />
+            <el-option label="全部" value="all" />
             <el-option label="iOS" value="ios" />
             <el-option label="Android" value="android" />
           </el-select>
@@ -161,7 +155,7 @@
                 placeholder="展示给用户的文案字符串"
               />
               <el-checkbox v-model="opt.multi" class="opt-multi">多选</el-checkbox>
-              <el-button link type="danger" @click="options.splice(idx, 1)">删</el-button>
+              <el-button link type="danger" @click="options.splice(idx, 1)">删除</el-button>
             </div>
             <div class="opt-actions">
               <el-button size="small" @click="addPresetOption">+ 标准选项</el-button>
@@ -191,7 +185,8 @@ import { fetchOnboarding, saveOnboarding, fetchContentEnums } from '../api'
 import ScopeFilter from '../components/ScopeFilter.vue'
 import { loadWithCache, clearPageCache } from '../utils/pageCache'
 import { browseScopeParams, defaultCreateAppKey } from '../utils/scopeParams'
-import { ONBOARDING_KEY_ZH, APP_KEYS, LANG_OPTIONS } from '../utils/enumZh'
+import { ONBOARDING_KEY_ZH, LANG_OPTIONS, THEME_TAG_ZH } from '../utils/enumZh'
+import { shouldHidePlatform } from '../utils/productContext'
 
 /** Key → 中文对照（对齐后端 ONBOARDING_KEYS） */
 const KEY_LABEL_ZH = ONBOARDING_KEY_ZH
@@ -211,18 +206,7 @@ const OPTION_VALUE_ZH_BY_KEY = {
     occasionally: '偶尔',
     just_started: '刚开始',
   },
-  interest_tags: {
-    prayer: '祷告',
-    family: '家庭',
-    anxiety: '焦虑缓解',
-    gratitude: '感恩',
-    courage: '勇气',
-    work: '工作与使命',
-    peace: '平安',
-    hope: '盼望',
-    relationships: '人际关系',
-    healing: '医治',
-  },
+  interest_tags: { ...THEME_TAG_ZH },
   acquisition_channel: {
     tiktok: 'TikTok',
     instagram: 'Instagram',
@@ -323,6 +307,7 @@ const rows = ref([])
 const page = ref(1)
 const total = ref(0)
 const loading = ref(false)
+const showPlat = !shouldHidePlatform()
 const visible = ref(false)
 const form = ref({})
 const options = ref([])
@@ -505,7 +490,7 @@ async function load(p = page.value) {
 
 function open(row) {
   form.value = row
-    ? { ...row }
+    ? { ...row, language: row.language || 'all', platform: row.platform || 'all' }
     : {
         question_key: 'faith_type',
         title: '',
@@ -513,8 +498,8 @@ function open(row) {
         enabled: true,
         options: [],
         app_key: defaultCreateAppKey(appKey.value),
-        language: language.value || '',
-        platform: platform.value || '',
+        language: language.value || 'all',
+        platform: platform.value || 'all',
       }
   const qk = form.value.question_key
   options.value = (form.value.options || []).map((o) => normalizeOptRow(o, qk))
@@ -569,8 +554,9 @@ async function save() {
     cleaned.push(item)
   }
   form.value.options = cleaned
-  form.value.language = form.value.language || ''
-  form.value.platform = form.value.platform || ''
+  form.value.language = form.value.language === 'all' ? '' : (form.value.language || '')
+  form.value.platform = showPlat ? (form.value.platform === 'all' ? '' : (form.value.platform || '')) : ''
+  form.value.app_key = defaultCreateAppKey(appKey.value)
   try {
     await saveOnboarding(form.value)
     ElMessage.success('已保存')
@@ -643,26 +629,26 @@ onMounted(async () => {
   border-radius: 4px;
 }
 .opt-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: 240px minmax(140px, 1fr) 68px 52px;
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
   font-size: 12px;
   color: #8a8a8a;
 }
-.opt-h-value { width: 240px; flex-shrink: 0; }
-.opt-h-label { flex: 1; }
-.opt-h-multi { width: 52px; flex-shrink: 0; text-align: center; }
-.opt-h-act { width: 36px; flex-shrink: 0; }
+.opt-h-multi { text-align: center; }
 .opt-row {
-  display: flex;
-  margin-bottom: 8px;
+  display: grid;
+  grid-template-columns: 240px minmax(140px, 1fr) 68px 52px;
   align-items: center;
   gap: 8px;
+  margin-bottom: 8px;
 }
-.opt-value { width: 240px; flex-shrink: 0; }
-.opt-label { flex: 1; min-width: 120px; }
-.opt-multi { width: 52px; flex-shrink: 0; margin-right: 0; }
+.opt-value,
+.opt-label { width: 100%; }
+.opt-multi { justify-self: center; margin-right: 0; }
+.opt-row > .el-button { justify-self: center; }
 .opt-actions {
   display: flex;
   flex-wrap: wrap;

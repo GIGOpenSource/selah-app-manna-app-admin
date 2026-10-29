@@ -37,13 +37,72 @@ export function rotateDeviceId() {
 	return id
 }
 
-/** IANA 时区，失败回退 UTC */
+/**
+ * 整小时/半小时偏移 → IANA 名。
+ * 兜底用：App 端 JS 引擎（iOS JSCore / 部分 Android WebView）取不到 Intl 时区，
+ * 直接退回 UTC 会让后端把 10:20(+8) 判成 02:20 → 早祷被判成晚祷。
+ */
+const TZ_HALF_HOUR = {
+	'5.5': 'Asia/Kolkata',
+	'5.75': 'Asia/Kathmandu',
+	'9.5': 'Australia/Darwin',
+}
+
+/**
+ * IANA 时区：优先 Intl，取不到时按设备 UTC 偏移兜底。
+ * 注：Etc/GMT-8 才是 UTC+8（IANA 的符号是反的）。
+ */
 export function getTimezone() {
+	let tz = ''
 	try {
-		return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
-	} catch (e) {
-		return 'UTC'
+		tz = String(Intl.DateTimeFormat().resolvedOptions().timeZone || '')
+	} catch (e) {}
+	if (tz && tz !== 'UTC') return tz
+	// Intl 缺失或报 UTC 时，用设备偏移判断是不是真的在 UTC 时区
+	const offset = -new Date().getTimezoneOffset() / 60
+	if (!offset) return 'UTC'
+	if (Number.isInteger(offset)) {
+		return `Etc/GMT${offset > 0 ? '-' : '+'}${Math.abs(offset)}`
 	}
+	return TZ_HALF_HOUR[String(offset)] || tz || 'UTC'
+}
+
+/** 给请求参数补上 tz（调用方已传则保留） */
+export function withTz(params = {}) {
+	return { ...params, tz: params.tz || getTimezone() }
+}
+
+/**
+ * 客户端平台：ios / android / h5。
+ * App 读系统；H5 可用 debug_x_platform，否则跟系统/UA。
+ */
+export function getClientPlatform() {
+	// #ifdef APP-PLUS
+	try {
+		const p = String(uni.getSystemInfoSync().platform || '').toLowerCase()
+		return p === 'ios' ? 'ios' : 'android'
+	} catch (e) {
+		return 'android'
+	}
+	// #endif
+	// #ifndef APP-PLUS
+	try {
+		const debug = String(uni.getStorageSync('debug_x_platform') || '').toLowerCase()
+		if (debug === 'ios' || debug === 'android') return debug
+	} catch (e) {}
+	try {
+		const info = uni.getSystemInfoSync() || {}
+		const p = String(info.platform || info.osName || '').toLowerCase()
+		if (p === 'ios' || p === 'iphone' || p === 'ipad') return 'ios'
+		if (p === 'android') return 'android'
+	} catch (e) {}
+	try {
+		const ua = typeof navigator !== 'undefined' ? String(navigator.userAgent || '') : ''
+		if (/iPhone|iPad|iPod/i.test(ua)) return 'ios'
+		if (/Android/i.test(ua)) return 'android'
+	} catch (e) {}
+	return 'h5'
+	// #endif
 }
 
 /**

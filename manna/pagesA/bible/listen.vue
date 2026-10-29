@@ -1,21 +1,26 @@
 <template>
 	<!-- Figma 440:862 听经全屏；成功空经文走空态；无 audio 可保留 demo 进度条 -->
-	<view class="page">
-		<image class="page__bg" src="/static/ui/bible/listen/bg-listen.png" mode="aspectFill" />
-		<view class="page__fade" />
+	<view class="page" :class="{ 'page--mini': mini }">
+		<image v-if="!mini" class="page__bg" :src="listenBg" mode="aspectFill" />
+		<view v-if="!mini" class="page__fade" />
 
-		<view class="top" :style="{ paddingTop: statusBar + 'px' }">
-			<view class="top__spacer" />
-			<view class="top__close" hover-class="press" @click="close">
-				<image class="top__close-ico" src="/static/ui/bible/listen/ico-chevron-down.svg" mode="aspectFit" />
+		<view class="top" :style="{ paddingTop: statusBar + 'px' }" v-if="!mini">
+			<view class="top__down" hover-class="press" @click="collapseMini">
+				<image class="top__down-ico" src="/static/ui/bible/listen/ico-chevron-down.svg" mode="aspectFit" />
 			</view>
 		</view>
 
-		<view class="head">
+		<view class="head" v-if="!mini">
 			<text class="head__title">{{ bookName }} {{ chapter }}</text>
 		</view>
 
-		<scroll-view scroll-y class="verses" :scroll-into-view="scrollInto" scroll-with-animation>
+		<scroll-view
+			v-if="!mini"
+			scroll-y
+			class="verses"
+			:scroll-into-view="scrollInto"
+			scroll-with-animation
+		>
 			<view
 				v-for="v in verses"
 				:id="'lv-' + v.verse"
@@ -33,13 +38,13 @@
 			<view class="verses__pad" />
 		</scroll-view>
 
-		<view class="dock">
+		<view class="dock" v-if="!mini">
 			<view class="tools">
 				<view
 					class="tool"
 					:class="{ 'tool--on': sleepActive }"
 					hover-class="press"
-					@click="onTimer"
+					@tap.stop="onTimer"
 				>
 					<text v-if="sleepRemainSec > 0" class="tool__rate">{{ fmt(sleepRemainSec) }}</text>
 					<image
@@ -56,15 +61,30 @@
 					class="tool"
 					:class="{ 'tool--on': downloaded }"
 					hover-class="press"
-					@click="onDownload"
+					@click="openDownloadSheet"
 				>
-					<image class="tool__ico" src="/static/ui/bible/listen/ico-download.svg" mode="aspectFit" />
+					<image
+						class="tool__ico"
+						:src="
+							downloaded
+								? '/static/ui/bible/listen/downloaded.png'
+								: '/static/ui/bible/listen/ico-download.svg'
+						"
+						mode="aspectFit"
+					/>
 				</view>
 			</view>
 
 			<view class="prog">
 				<view class="prog__t">{{ fmt(currentSec) }}</view>
-				<view class="prog__track" @click="onSeekTap">
+				<view
+					id="seek-track"
+					class="prog__track"
+					@touchstart.stop="onSeekStart"
+					@touchmove.stop.prevent="onSeekMove"
+					@touchend.stop="onSeekEnd"
+					@touchcancel.stop="onSeekEnd"
+				>
 					<view class="prog__rail" />
 					<view class="prog__fill" :style="{ width: progressPct + '%' }" />
 					<view class="prog__knob" :style="{ left: progressPct + '%' }" />
@@ -77,30 +97,27 @@
 					class="side"
 					:class="{ 'side--off': !musicOn }"
 					hover-class="press"
-					@click.stop="openMusicSheet"
+					@tap.stop="openMusicSheet"
 				>
 					<image class="side__ico" src="/static/ui/bible/listen/ico-music.svg" mode="aspectFit" />
 					<text class="side__lab">{{ t('listen_music') }}</text>
 				</view>
-				<view class="side side--mid" hover-class="press" @click.stop="skip(-15)">
+				<view class="side side--mid" hover-class="press" @click.stop="changeChapter(-1)">
 					<image class="side__ico" src="/static/ui/bible/listen/ico-skip-back.svg" mode="aspectFit" />
 				</view>
-				<view class="play" hover-class="press" @click.stop="toggle">
-					<view v-if="playing" class="play__pause">
+				<view class="play" hover-class="press" @tap.stop="toggle">
+					<view v-show="playing" class="play__pause">
 						<view class="play__bar" />
 						<view class="play__bar" />
 					</view>
-					<!-- 圆角播放三角：不用 border 尖角，H5 用 inline SVG 避免外链 image 空白 -->
-					<view v-else class="play__triangle" aria-hidden="true">
-						<svg class="play__triangle-svg" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-							<path
-								d="M25.289 12.171c2.588 1.554 2.588 5.304 0 6.858L14.559 25.472C11.893 27.073 8.5 25.152 8.5 22.043V9.157c0-3.11 3.393-5.03 6.059-3.429l10.73 6.443z"
-								fill="#FFFFFF"
-							/>
-						</svg>
-					</view>
+					<image
+						v-show="!playing"
+						class="play__ico"
+						src="/static/ui/bible/listen/ico-play.svg"
+						mode="aspectFit"
+					/>
 				</view>
-				<view class="side side--mid" hover-class="press" @click.stop="skip(15)">
+				<view class="side side--mid" hover-class="press" @click.stop="changeChapter(1)">
 					<image class="side__ico" src="/static/ui/bible/listen/ico-skip-fwd.svg" mode="aspectFit" />
 				</view>
 				<view class="side" hover-class="press" @click.stop="cycleVoice">
@@ -110,26 +127,45 @@
 			</view>
 		</view>
 
-		<!-- 背景音乐音量 -->
-		<view v-if="musicSheet" class="mask" @click="closeMusicSheet">
-			<view class="msheet" @click.stop>
+		<!-- 经文 / 配乐 分轨音量 -->
+		<view v-if="musicSheet" class="mask mask--dock" @touchmove.stop.prevent="noop">
+			<view v-if="listenMaskReady" class="mask__hit" @tap.stop="onMusicMaskClose" />
+			<view class="msheet" @tap.stop @click.stop>
 				<view class="msheet__handle" />
 				<text class="msheet__title">{{ t('listen_music') }}</text>
+				<text class="msheet__sub">{{ t('listen_voice_volume') }} · {{ voiceVolPct }}%</text>
+				<view class="msheet__slider">
+					<view
+						id="voice-vol-track"
+						class="vslider"
+						@touchstart.stop="onVoiceTrackStart"
+						@touchmove.stop.prevent="onVoiceTrackMove"
+						@touchend.stop="onVoiceTrackEnd"
+						@touchcancel.stop="onVoiceTrackEnd"
+					>
+						<view class="vslider__rail">
+							<view class="vslider__fill" :style="{ width: voiceVolPct + '%' }" />
+							<view class="vslider__knob" :style="{ left: voiceVolPct + '%' }" />
+						</view>
+					</view>
+					<text class="msheet__pct">{{ voiceVolPct }}</text>
+				</view>
 				<text class="msheet__sub">{{ t('listen_music_volume') }} · {{ musicVolPct }}%</text>
 				<view class="msheet__slider">
 					<text class="msheet__mute" @click="setBgmVolume(0)">{{ t('listen_music_off_short') }}</text>
-					<slider
-						class="msheet__bar"
-						:value="musicVolPct"
-						:min="0"
-						:max="100"
-						:step="1"
-						activeColor="#ffffff"
-						backgroundColor="rgba(255,255,255,0.18)"
-						block-size="20"
-						@changing="onMusicVolChanging"
-						@change="onMusicVolChange"
-					/>
+					<view
+						id="music-vol-track"
+						class="vslider"
+						@touchstart.stop="onMusicTrackStart"
+						@touchmove.stop.prevent="onMusicTrackMove"
+						@touchend.stop="onMusicTrackEnd"
+						@touchcancel.stop="onMusicTrackEnd"
+					>
+						<view class="vslider__rail">
+							<view class="vslider__fill" :style="{ width: musicVolPct + '%' }" />
+							<view class="vslider__knob" :style="{ left: musicVolPct + '%' }" />
+						</view>
+					</view>
 					<text class="msheet__pct">{{ musicVolPct }}</text>
 				</view>
 				<view class="msheet__presets">
@@ -148,8 +184,9 @@
 		</view>
 
 		<!-- 定时关闭（深色底栏，对齐听经页） -->
-		<view v-if="timerSheet" class="mask" @click="closeTimerSheet">
-			<view class="msheet" @click.stop>
+		<view v-if="timerSheet" class="mask mask--dock" @touchmove.stop.prevent="noop">
+			<view v-if="listenMaskReady" class="mask__hit" @tap.stop="onTimerMaskClose" />
+			<view class="msheet" @tap.stop @click.stop>
 				<view class="msheet__handle" />
 				<text class="msheet__title">{{ t('listen_timer') }}</text>
 				<view class="tlist">
@@ -169,7 +206,7 @@
 						hover-class="press"
 						@click="pickTimer('min', n)"
 					>
-						<text class="tlist__t">{{ t('listen_timer_min', { n }) }}</text>
+						<text class="tlist__t">{{ t('listen_timer_min', { n: n }) }}</text>
 					</view>
 					<view
 						class="tlist__row"
@@ -182,619 +219,328 @@
 				</view>
 			</view>
 		</view>
+
+		<!-- 下载本书（暖棕底弹层，对齐设计稿） -->
+		<view v-if="downloadSheet" class="mask" @touchmove.stop.prevent="noop">
+			<view v-if="listenMaskReady" class="mask__hit" @tap.stop="closeDownloadSheet" />
+			<view class="dsheet" @tap.stop @click.stop>
+				<view class="dsheet__handle" />
+				<view class="dsheet__head">
+					<text class="dsheet__title">{{ t('listen_download_sheet') }}</text>
+					<image
+						class="dsheet__wifi"
+						src="/static/ui/bible/listen/icowifi.png"
+						mode="aspectFit"
+					/>
+				</view>
+				<view class="dsheet__row">
+					<view class="dsheet__meta">
+						<text class="dsheet__book">{{ bookName }}</text>
+						<text class="dsheet__sub">{{ downloadMetaLabel }}</text>
+					</view>
+					<view
+						class="dsheet__btn"
+						:class="{
+							'dsheet__btn--busy': downloadBusy,
+							'dsheet__btn--done': downloaded && !downloadBusy,
+						}"
+						hover-class="press"
+						@click.stop="onSheetDownload"
+					>
+						<view v-if="downloadBusy" class="dsheet__ring" :style="ringStyle" />
+						<image
+							v-else-if="downloaded"
+							class="dsheet__btn-ico"
+							src="/static/ui/bible/listen/ico-check-circle.svg"
+							mode="aspectFit"
+						/>
+						<text class="dsheet__btn-t">{{ downloadBtnLabel }}</text>
+					</view>
+				</view>
+			</view>
+		</view>
+
+		<view v-if="mini" class="mini" hover-class="press" @click="expandMini">
+			<view class="mini__play" @click.stop="toggle">
+				<image
+					class="mini__ico"
+					:class="{ 'mini__ico--play': !playing }"
+					:src="playing ? '/static/ui/bible/ico-pause.svg' : '/static/ui/bible/listen/ico-play.svg'"
+					mode="aspectFit"
+				/>
+			</view>
+			<view class="mini__meta">
+				<text class="mini__t">{{ bookName }} {{ chapter }}</text>
+				<text class="mini__m">{{ fmt(currentSec) }} / {{ fmt(durationSec) }}</text>
+			</view>
+			<view class="mini__close" @click.stop="close">
+				<image class="mini__x" src="/static/ui/ico-close.svg" mode="aspectFit" />
+			</view>
+		</view>
+		<view v-if="voiceLoading" class="dl" @touchmove.stop.prevent="noop">
+			<view class="dl__box">
+				<text class="dl__t">{{ t('loading') }}</text>
+			</view>
+		</view>
+		<!-- <manna-badge-toast v-model:visible="badgeOpen" :items="badgeItems" /> -->
 	</view>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { computed, getCurrentInstance, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { t } from '@/i18n/index.js'
-import { apiBibleChapter } from '@/api/bible.js'
-import { withDemoChapter, DEMO_LISTEN } from '@/utils/bibleDemo.js'
-import { absolutizeMedia } from '@/utils/media.js'
-import { getStatusBarPx } from '@/utils/safeArea.js'
-import {
-	canPersistAssets,
-	downloadAndPersist,
-	hasPersistedAsset,
-	peekLocalAsset,
-} from '@/utils/assetCache.js'
+import { useMaskReady } from '@/utils/overlay.js'
+import { stopHomeBgm } from '@/utils/homeBgm.js'
+import { useListenPlayback } from './useListenPlayback.js'
+import { useListenBgm, BGM_PRESETS } from './useListenBgm.js'
+import { useListenSleep, TIMER_MINUTES } from './useListenSleep.js'
 
-const RATES = [0.75, 1, 1.25, 1.5]
-const VOICES = [
-	{ key: 'female', label: 'Female' },
-	{ key: 'male', label: 'Male' },
-]
-const TIMER_MINUTES = [5, 10, 15, 30, 60]
-const BGM_SRC = '/static/audio/listen-bgm.mp3'
-const BGM_VOL_KEY = 'manna_listen_bgm_vol'
-const BGM_DEFAULT = 0.22
-const BGM_PRESETS = [
-	{ key: 'off', vol: 0, labelKey: 'listen_music_off_short' },
-	{ key: 'quiet', vol: 0.12, labelKey: 'listen_music_quiet' },
-	{ key: 'normal', vol: 0.22, labelKey: 'listen_music_normal' },
-	{ key: 'strong', vol: 0.4, labelKey: 'listen_music_strong' },
-]
+/** 进听经页先掐掉首页背景音：朗读不能被轻音乐叠着；先注册，保证早于播放逻辑的 onLoad */
+onLoad(() => {
+	stopHomeBgm()
+})
 
-function readStoredBgmVol() {
-	const raw = uni.getStorageSync(BGM_VOL_KEY)
-	if (raw === '' || raw == null) return BGM_DEFAULT
-	const n = Number(raw)
-	if (Number.isNaN(n)) return BGM_DEFAULT
-	return Math.max(0, Math.min(1, n))
-}
-
-const statusBar = getStatusBarPx()
-const bookKey = ref('genesis')
-const bookName = ref('')
-const translation = ref('web')
-const chapter = ref(1)
-const verses = ref([])
-const audioUrl = ref('')
-/** API 下发的章节朗读 URL（含 gender 段）；Voice 切换时以此为底改写，避免串路径 */
-const chapterAudioUrl = ref('')
-const durationSec = ref(0)
-const currentSec = ref(0)
-const activeVerse = ref(0)
-const scrollInto = ref('')
-const playing = ref(false)
-const bgmVolume = ref(readStoredBgmVol())
 const musicSheet = ref(false)
 const timerSheet = ref(false)
-const sleepPickMin = ref(0)
-const rateIdx = ref(1)
-const voiceIdx = ref(1)
-const autoplay = ref(true)
-const loading = ref(false)
-const sleepRemainSec = ref(0)
-const sleepUntilEnd = ref(false)
-const downloaded = ref(false)
-const downloadBusy = ref(false)
+const downloadSheet = ref(false)
+const listenMaskReady = useMaskReady(
+	() => !!(musicSheet.value || timerSheet.value || downloadSheet.value),
+)
 
-let innerAudio = null
-let bgmAudio = null
-let tick = null
-let demoTimer = null
-let sleepTick = null
-/** Voice 切换中：onError 时回退音色，不掉进 demo 进度条 */
-let voiceSwitchPending = false
-let voiceSwitchPrevIdx = 1
+const hooks = {}
 
-const musicOn = computed(() => bgmVolume.value > 0.001)
-const musicVolPct = computed(() => Math.round(bgmVolume.value * 100))
-const presetKey = computed(() => {
-	const v = bgmVolume.value
-	const hit = BGM_PRESETS.find((p) => Math.abs(p.vol - v) < 0.015)
-	return hit ? hit.key : ''
-})
-const rateLabel = computed(() => `${RATES[rateIdx.value].toFixed(1)}X`)
-const voiceLabel = computed(() => VOICES[voiceIdx.value]?.label || 'Male')
-const voiceKey = computed(() => VOICES[voiceIdx.value]?.key || 'male')
-const sleepActive = computed(() => sleepRemainSec.value > 0 || sleepUntilEnd.value)
-const progressPct = computed(() => {
-	const d = durationSec.value || 1
-	return Math.max(0, Math.min(100, (currentSec.value / d) * 100))
+const sleep = useListenSleep({
+	hooks,
+	musicSheet,
+	timerSheet,
+	listenMaskReady,
 })
 
-function genderFromUrl(url) {
-	const m = String(url || '').match(/\/(male|female)\//i)
-	return m ? m[1].toLowerCase() : ''
-}
-
-function withVoiceGender(url, gender) {
-	if (!url) return ''
-	if (/\/(male|female)\//i.test(url)) {
-		return url.replace(/\/(male|female)\//i, `/${gender}/`)
-	}
-	return url
-}
-
-function buildAudioUrl(gender) {
-	const g = gender || voiceKey.value
-	const cur = chapterAudioUrl.value || audioUrl.value
-	if (cur && /\/(male|female)\//i.test(cur)) {
-		return withVoiceGender(cur, g)
-	}
-	const book = (bookName.value || bookKey.value || '').trim()
-	if (!book) return ''
-	const tr = String(translation.value || 'web').toUpperCase()
-	const ch = String(Number(chapter.value) || 1).padStart(3, '0')
-	return absolutizeMedia(`/bible-media/${tr}/${g}/${book}/${ch}.mp3`)
-}
-
-function setVoiceFromUrl(url) {
-	const g = genderFromUrl(url) || 'male'
-	const idx = VOICES.findIndex((v) => v.key === g)
-	voiceIdx.value = idx >= 0 ? idx : 1
-}
-
-onLoad((q) => {
-	if (q?.book) bookKey.value = String(q.book)
-	if (q?.chapter) chapter.value = Number(q.chapter) || 1
-	if (q?.name) bookName.value = decodeURIComponent(String(q.name))
-	autoplay.value = String(q?.autoplay || '1') !== '0'
+const playback = useListenPlayback({
+	syncBgm: () => hooks.syncBgm && hooks.syncBgm(),
+	clearSleepTimer: sleep.clearSleepTimer,
+	sleepUntilEnd: sleep.sleepUntilEnd,
 })
 
-function fmt(sec) {
-	const s = Math.max(0, Math.floor(Number(sec) || 0))
-	const m = Math.floor(s / 60)
-	const r = s % 60
-	return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`
-}
+const bgm = useListenBgm({
+	playing: playback.playing,
+	musicSheet,
+	timerSheet,
+	listenMaskReady,
+})
 
-function syncActiveFromTime(tSec) {
-	const list = verses.value
-	if (!list.length) return
-	const d = durationSec.value || 1
-	const idx = Math.min(list.length - 1, Math.floor((tSec / d) * list.length))
-	const v = list[idx]?.verse || idx + 1
-	if (v !== activeVerse.value) {
-		activeVerse.value = v
-		scrollInto.value = 'lv-' + v
+hooks.syncBgm = bgm.syncBgm
+hooks.pausePlayback = playback.pausePlayback
+
+const {
+	statusBar,
+	bookName,
+	chapter,
+	chapterCount,
+	verses,
+	durationSec,
+	currentSec,
+	activeVerse,
+	scrollInto,
+	playing,
+	listenBg,
+	mini,
+	loading,
+	downloaded,
+	downloadBusy,
+	downloadPct,
+	voiceLoading,
+	badgeOpen,
+	badgeItems,
+	rateLabel,
+	voiceLabel,
+	voiceVolPct,
+	sliderMax,
+	progressPct,
+	fmt,
+	onSeekChanging,
+	onSeekChange,
+	onVoiceVolChanging,
+	onVoiceVolChange,
+	toggle,
+	cycleRate,
+	cycleVoice,
+	onDownload,
+	changeChapter,
+	collapseMini,
+	expandMini,
+	close,
+	noop,
+} = playback
+
+const {
+	musicOn,
+	musicVolPct,
+	presetKey,
+	setBgmVolume,
+	onMusicVolChanging,
+	onMusicVolChange,
+	openMusicSheet,
+	onMusicMaskClose,
+} = bgm
+
+const pageInst = getCurrentInstance()
+const volRect = { voice: null, music: null, seek: null }
+
+/** 整本书体积估算：128kbps 单声道约 16KB/s；本章时长未知时按每章 1.4MB 估 */
+const bookSizeMb = computed(() => {
+	const n = Math.max(1, Number(chapterCount.value) || 1)
+	const dur = Number(durationSec.value) || 0
+	const perChapter = dur > 1 ? dur * 16000 : 1400 * 1024
+	return Math.max(1, Math.round((perChapter * n) / 1048576))
+})
+
+const downloadMetaLabel = computed(() => {
+	const n = Number(chapterCount.value) || 0
+	const size = `${bookSizeMb.value}MB`
+	return n > 1 ? `${t('listen_download_chapters', { n })} | ${size}` : size
+})
+
+const downloadBtnLabel = computed(() => {
+	if (downloadBusy.value) {
+		return downloadPct.value > 0 ? `${downloadPct.value}%` : t('listen_download_doing')
 	}
-}
+	if (downloaded.value) return t('listen_download_done_btn')
+	return t('listen_download_sheet')
+})
 
-function stopTick() {
-	if (tick) {
-		clearInterval(tick)
-		tick = null
+/** 真实进度圆环：conic-gradient 从 0% 画到当前百分比 */
+const ringStyle = computed(() => {
+	const p = Math.max(0, Math.min(100, Number(downloadPct.value) || 0))
+	return {
+		background: `conic-gradient(#ffffff 0% ${p}%, rgba(255, 255, 255, 0.24) ${p}% 100%)`,
 	}
-	if (demoTimer) {
-		clearInterval(demoTimer)
-		demoTimer = null
-	}
+})
+
+function openDownloadSheet() {
+	downloadSheet.value = true
 }
 
-function clearSleepTimer() {
-	if (sleepTick) {
-		clearInterval(sleepTick)
-		sleepTick = null
-	}
-	sleepRemainSec.value = 0
-	sleepUntilEnd.value = false
-	sleepPickMin.value = 0
+function closeDownloadSheet() {
+	downloadSheet.value = false
 }
 
-function pausePlayback() {
-	if (innerAudio) {
-		try { innerAudio.pause() } catch (e) {}
-		stopTick()
-	} else {
-		stopTick()
-	}
-	playing.value = false
-	syncBgm()
-}
-
-function fireSleepStop() {
-	clearSleepTimer()
-	pausePlayback()
-	uni.showToast({ title: t('listen_timer_done'), icon: 'none' })
-}
-
-function startSleepCountdown(minutes) {
-	const mins = Math.max(1, Math.floor(Number(minutes) || 0))
-	clearSleepTimer()
-	sleepPickMin.value = mins
-	sleepRemainSec.value = mins * 60
-	sleepTick = setInterval(() => {
-		sleepRemainSec.value -= 1
-		if (sleepRemainSec.value <= 0) fireSleepStop()
-	}, 1000)
-}
-
-function onChapterEnded() {
-	playing.value = false
-	stopTick()
-	activeVerse.value = 0
-	syncBgm()
-	if (sleepUntilEnd.value) {
-		sleepUntilEnd.value = false
-		uni.showToast({ title: t('listen_timer_done'), icon: 'none' })
-	}
-}
-
-function remoteAudioSrc() {
-	return buildAudioUrl(voiceKey.value) || audioUrl.value || ''
-}
-
-function playSrcFor(remote) {
-	const src = (remote || '').trim()
-	if (!src) return ''
-	if (hasPersistedAsset(src)) return peekLocalAsset(src) || src
-	return src
-}
-
-function refreshDownloadedFlag() {
-	downloaded.value = hasPersistedAsset(remoteAudioSrc())
-}
-
-function h5SaveAudio(url) {
-	if (typeof document === 'undefined') return false
-	try {
-		const book = (bookName.value || bookKey.value || 'chapter').replace(/\s+/g, '_')
-		const name = `${book}-${String(chapter.value).padStart(3, '0')}-${voiceKey.value}.mp3`
-		const a = document.createElement('a')
-		a.href = url
-		a.download = name
-		a.rel = 'noopener'
-		document.body.appendChild(a)
-		a.click()
-		a.remove()
-		return true
-	} catch (e) {
-		return false
-	}
-}
-
-function destroyBgm() {
-	if (bgmAudio) {
-		try { bgmAudio.stop() } catch (e) {}
-		try { bgmAudio.destroy() } catch (e) {}
-		bgmAudio = null
-	}
-}
-
-function ensureBgm() {
-	if (bgmAudio) return true
-	bgmAudio = uni.createInnerAudioContext()
-	bgmAudio.src = BGM_SRC
-	bgmAudio.loop = true
-	bgmAudio.volume = bgmVolume.value
-	bgmAudio.onError(() => {
-		// 配乐失败不打断听经
-		destroyBgm()
-	})
-	return true
-}
-
-function syncBgm() {
-	if (!musicOn.value || !playing.value) {
-		if (bgmAudio) {
-			try { bgmAudio.pause() } catch (e) {}
-		}
-		return
-	}
-	if (!ensureBgm()) return
-	try {
-		bgmAudio.volume = bgmVolume.value
-		bgmAudio.play()
-	} catch (e) {}
-}
-
-function applyBgmVolumeLive(vol) {
-	const n = Math.max(0, Math.min(1, Number(vol) || 0))
-	bgmVolume.value = n
-	if (bgmAudio) {
-		try { bgmAudio.volume = n } catch (e) {}
-	}
-	if (n <= 0.001) {
-		if (bgmAudio) {
-			try { bgmAudio.pause() } catch (e) {}
-		}
-		return
-	}
-	if (playing.value) syncBgm()
-}
-
-function setBgmVolume(vol) {
-	const n = Math.max(0, Math.min(1, Number(vol) || 0))
-	applyBgmVolumeLive(n)
-	try { uni.setStorageSync(BGM_VOL_KEY, n) } catch (e) {}
-}
-
-function onMusicVolChanging(e) {
-	applyBgmVolumeLive((Number(e?.detail?.value) || 0) / 100)
-}
-
-function onMusicVolChange(e) {
-	setBgmVolume((Number(e?.detail?.value) || 0) / 100)
-}
-
-function openMusicSheet() {
-	timerSheet.value = false
-	musicSheet.value = true
-}
-
-function closeMusicSheet() {
-	musicSheet.value = false
-}
-
-function openTimerSheet() {
-	musicSheet.value = false
-	timerSheet.value = true
-}
-
-function closeTimerSheet() {
-	timerSheet.value = false
-}
-
-function pickTimer(kind, minutes) {
-	if (kind === 'off') {
-		clearSleepTimer()
-		closeTimerSheet()
-		uni.showToast({ title: t('listen_timer_cleared'), icon: 'none' })
-		return
-	}
-	if (kind === 'end') {
-		clearSleepTimer()
-		sleepUntilEnd.value = true
-		closeTimerSheet()
-		uni.showToast({ title: t('listen_timer_end_set'), icon: 'none' })
-		return
-	}
-	const mins = Number(minutes) || 0
-	startSleepCountdown(mins)
-	closeTimerSheet()
-	uni.showToast({ title: t('listen_timer_set', { n: mins }), icon: 'none' })
-}
-
-function destroyAudio() {
-	stopTick()
-	if (innerAudio) {
-		try { innerAudio.stop() } catch (e) {}
-		try { innerAudio.destroy() } catch (e) {}
-		innerAudio = null
-	}
-	playing.value = false
-	syncBgm()
-}
-
-function startRealTick() {
-	stopTick()
-	tick = setInterval(() => {
-		if (!innerAudio) return
-		const tSec = Number(innerAudio.currentTime) || 0
-		currentSec.value = tSec
-		const d = Number(innerAudio.duration) || 0
-		if (d > 0) durationSec.value = d
-		syncActiveFromTime(tSec)
-	}, 220)
-}
-
-function startDemoPlayback() {
-	destroyAudio()
-	playing.value = true
-	syncBgm()
-	demoTimer = setInterval(() => {
-		currentSec.value = Math.min(durationSec.value, currentSec.value + 1)
-		syncActiveFromTime(currentSec.value)
-		if (currentSec.value >= durationSec.value) {
-			onChapterEnded()
-		}
-	}, 1000)
-}
-
-function ensureAudio() {
-	const remote = remoteAudioSrc()
-	const src = playSrcFor(remote)
-	if (!src) return false
-	if (innerAudio && innerAudio.src === src) return true
-	if (innerAudio) {
-		try { innerAudio.stop() } catch (e) {}
-		try { innerAudio.destroy() } catch (e) {}
-		innerAudio = null
-	}
-	audioUrl.value = remote || src
-	innerAudio = uni.createInnerAudioContext()
-	innerAudio.src = src
-	innerAudio.playbackRate = RATES[rateIdx.value]
-	innerAudio.onEnded(() => {
-		onChapterEnded()
-	})
-	innerAudio.onError(() => {
-		if (voiceSwitchPending) {
-			voiceSwitchPending = false
-			voiceIdx.value = voiceSwitchPrevIdx
-			audioUrl.value = buildAudioUrl(voiceKey.value) || chapterAudioUrl.value
-			refreshDownloadedFlag()
-			if (innerAudio) {
-				try { innerAudio.destroy() } catch (e) {}
-				innerAudio = null
-			}
-			uni.showToast({ title: t('listen_voice_fail'), icon: 'none' })
-			return
-		}
-		uni.showToast({ title: t('bible_audio_fail'), icon: 'none' })
-		startDemoPlayback()
-	})
-	innerAudio.onCanplay(() => {
-		if (voiceSwitchPending) voiceSwitchPending = false
-	})
-	return true
-}
-
-function toggle() {
-	if (playing.value) {
-		pausePlayback()
-		return
-	}
-	if (ensureAudio()) {
-		innerAudio.play()
-		playing.value = true
-		startRealTick()
-		syncBgm()
-		return
-	}
-	startDemoPlayback()
-}
-
-function skip(delta) {
-	const next = Math.max(0, Math.min(durationSec.value, currentSec.value + delta))
-	currentSec.value = next
-	if (innerAudio) {
-		try { innerAudio.seek(next) } catch (e) {}
-	}
-	syncActiveFromTime(next)
-}
-
-function onSeekTap(e) {
-	// uni 点击坐标不稳定时按步进，保证可交互
-	const next = Math.min(durationSec.value, currentSec.value + 10)
-	currentSec.value = next
-	if (innerAudio) {
-		try { innerAudio.seek(next) } catch (err) {}
-	}
-	syncActiveFromTime(next)
-}
-
-function cycleRate() {
-	rateIdx.value = (rateIdx.value + 1) % RATES.length
-	if (innerAudio) {
-		try { innerAudio.playbackRate = RATES[rateIdx.value] } catch (e) {}
-	}
-	uni.showToast({ title: rateLabel.value, icon: 'none' })
-}
-
-function reloadVoiceAudio() {
-	const wasPlaying = playing.value
-	const pos = currentSec.value
-	const nextUrl = buildAudioUrl(voiceKey.value)
-	if (!nextUrl) return false
-	audioUrl.value = nextUrl
-	if (innerAudio) {
-		try { innerAudio.stop() } catch (e) {}
-		try { innerAudio.destroy() } catch (e) {}
-		innerAudio = null
-	}
-	if (!ensureAudio()) return false
-	const resume = () => {
-		if (!innerAudio) return
-		try { innerAudio.seek(pos) } catch (e) {}
-		currentSec.value = pos
-		syncActiveFromTime(pos)
-		if (wasPlaying) {
-			innerAudio.play()
-			playing.value = true
-			startRealTick()
-			syncBgm()
-		}
-	}
-	// H5/小程序：duration 可能稍晚才就绪，短延迟再 seek
-	setTimeout(resume, 120)
-	return true
-}
-
-function cycleVoice() {
-	const prev = voiceIdx.value
-	voiceIdx.value = (voiceIdx.value + 1) % VOICES.length
-	voiceSwitchPrevIdx = prev
-	voiceSwitchPending = true
-	refreshDownloadedFlag()
-	if (!reloadVoiceAudio()) {
-		voiceSwitchPending = false
-		voiceIdx.value = prev
-		refreshDownloadedFlag()
-		uni.showToast({ title: t('listen_voice_fail'), icon: 'none' })
-		return
-	}
-	uni.showToast({ title: voiceLabel.value, icon: 'none' })
-}
-
-function onTimer() {
-	openTimerSheet()
-}
-
-async function onDownload() {
-	const remote = remoteAudioSrc()
-	if (!remote) {
-		uni.showToast({ title: t('listen_download_none'), icon: 'none' })
-		return
-	}
-	if (downloaded.value) {
-		uni.showToast({ title: t('listen_downloaded'), icon: 'none' })
-		return
-	}
+/** 下载逻辑完全沿用 playback.onDownload；进度不再弹居中遮罩，直接用按钮三态反馈 */
+async function onSheetDownload() {
 	if (downloadBusy.value) return
-	downloadBusy.value = true
-	uni.showLoading({ title: t('listen_download_busy'), mask: true })
-	try {
-		if (!canPersistAssets()) {
-			const ok = h5SaveAudio(remote)
-			uni.showToast({
-				title: ok ? t('listen_download_ok') : t('listen_download_fail'),
-				icon: 'none',
-			})
-			return
-		}
-		const res = await downloadAndPersist(remote)
-		if (!res?.ok) {
-			uni.showToast({ title: t('listen_download_fail'), icon: 'none' })
-			return
-		}
-		downloaded.value = true
-		uni.showToast({ title: t('listen_download_ok'), icon: 'none' })
-	} catch (e) {
-		uni.showToast({ title: t('listen_download_fail'), icon: 'none' })
-	} finally {
-		downloadBusy.value = false
-		try { uni.hideLoading() } catch (e) {}
-	}
+	await onDownload()
 }
 
-function close() {
-	destroyAudio()
-	destroyBgm()
-	clearSleepTimer()
-	uni.navigateBack({ fail: () => uni.switchTab({ url: '/pages/bible/bible' }) })
+function touchX(e) {
+	const t = (e && e.touches && e.touches[0]) || (e && e.changedTouches && e.changedTouches[0])
+	if (!t) return null
+	const x = t.clientX != null ? t.clientX : t.pageX
+	return Number.isFinite(Number(x)) ? Number(x) : null
 }
 
-onMounted(async () => {
-	loading.value = true
-	try {
-		const res = await apiBibleChapter({
-			translation: translation.value || 'web',
-			book: bookKey.value,
-			chapter: chapter.value,
-		})
-		const d = res?.results || {}
-		if (d.translation) translation.value = String(d.translation)
-		if (d.book_name || d.book_title) bookName.value = d.book_name || d.book_title
-		if (d.chapter) chapter.value = Number(d.chapter) || chapter.value
-		const list = Array.isArray(d.verses) ? d.verses : []
-		verses.value = list.map((v, i) => ({
-			verse: Number(v.verse) || i + 1,
-			text: v.text || v.content || '',
-		}))
-		audioUrl.value = absolutizeMedia(d.audio_url || '')
-		chapterAudioUrl.value = audioUrl.value
-		setVoiceFromUrl(audioUrl.value || chapterAudioUrl.value)
-		if (!audioUrl.value && (bookName.value || bookKey.value)) {
-			// 章节无 audio_url 时仍按书卷拼 bible-media 路径，便于 Voice 切换试听
-			chapterAudioUrl.value = buildAudioUrl(voiceKey.value)
-			audioUrl.value = chapterAudioUrl.value
-		} else if (audioUrl.value) {
-			audioUrl.value = buildAudioUrl(voiceKey.value)
-		}
-		durationSec.value = Number(d.audio_duration_sec) || 0
-		if (verses.value.length) {
-			activeVerse.value = verses.value[0].verse
-			currentSec.value = 0
-			// 真章节有经文但无音频：保留 demo 进度条便于播放 UX
-			if (!audioUrl.value) {
-				durationSec.value = durationSec.value || DEMO_LISTEN.audio_duration_sec
-			}
-		}
-	} catch (e) {
-		const d = withDemoChapter(null, DEMO_LISTEN)
-		bookName.value = bookName.value || d.book_name
-		verses.value = d.verses
-		durationSec.value = d.audio_duration_sec
-		activeVerse.value = d.verses[0]?.verse || 1
-		currentSec.value = 0
-	} finally {
-		loading.value = false
-	}
-	refreshDownloadedFlag()
-	if (activeVerse.value) scrollInto.value = 'lv-' + activeVerse.value
-	if (autoplay.value && verses.value.length) toggle()
-})
+function measureTrack(selector) {
+	return new Promise((resolve) => {
+		const proxy = pageInst && pageInst.proxy
+		const q = proxy ? uni.createSelectorQuery().in(proxy) : uni.createSelectorQuery()
+		q.select(selector).boundingClientRect((rect) => {
+			resolve(rect && rect.width ? rect : null)
+		}).exec()
+	})
+}
 
-onUnmounted(() => {
-	destroyAudio()
-	destroyBgm()
-	clearSleepTimer()
-})
+async function volPct(key, selector, e, refresh) {
+	const x = touchX(e)
+	if (x == null) return null
+	if (refresh || !volRect[key]) volRect[key] = await measureTrack(selector)
+	const rect = volRect[key]
+	if (!rect || !rect.width) return null
+	return Math.round(Math.max(0, Math.min(1, (x - rect.left) / rect.width)) * 100)
+}
+
+async function onVoiceTrackStart(e) {
+	const pct = await volPct('voice', '#voice-vol-track', e, true)
+	if (pct == null) return
+	onVoiceVolChanging({ detail: { value: pct } })
+}
+
+function onVoiceTrackMove(e) {
+	const rect = volRect.voice
+	const x = touchX(e)
+	if (!rect || !rect.width || x == null) return
+	const pct = Math.round(Math.max(0, Math.min(1, (x - rect.left) / rect.width)) * 100)
+	onVoiceVolChanging({ detail: { value: pct } })
+}
+
+async function onVoiceTrackEnd(e) {
+	const pct = await volPct('voice', '#voice-vol-track', e, false)
+	if (pct == null) return
+	onVoiceVolChange({ detail: { value: pct } })
+}
+
+async function onMusicTrackStart(e) {
+	const pct = await volPct('music', '#music-vol-track', e, true)
+	if (pct == null) return
+	onMusicVolChanging({ detail: { value: pct } })
+}
+
+function onMusicTrackMove(e) {
+	const rect = volRect.music
+	const x = touchX(e)
+	if (!rect || !rect.width || x == null) return
+	const pct = Math.round(Math.max(0, Math.min(1, (x - rect.left) / rect.width)) * 100)
+	onMusicVolChanging({ detail: { value: pct } })
+}
+
+async function onMusicTrackEnd(e) {
+	const pct = await volPct('music', '#music-vol-track', e, false)
+	if (pct == null) return
+	onMusicVolChange({ detail: { value: pct } })
+}
+
+function seekSecFromX(x) {
+	const rect = volRect.seek
+	const max = Number(sliderMax.value) || 0
+	if (!rect || !rect.width || max <= 0 || x == null) return null
+	const ratio = Math.max(0, Math.min(1, (x - rect.left) / rect.width))
+	return ratio * max
+}
+
+async function onSeekStart(e) {
+	volRect.seek = null
+	const x = touchX(e)
+	if (x == null) return
+	volRect.seek = await measureTrack('#seek-track')
+	const sec = seekSecFromX(x)
+	if (sec == null) return
+	onSeekChanging({ detail: { value: sec } })
+}
+
+function onSeekMove(e) {
+	const sec = seekSecFromX(touchX(e))
+	if (sec == null) return
+	onSeekChanging({ detail: { value: sec } })
+}
+
+async function onSeekEnd(e) {
+	if (!volRect.seek) volRect.seek = await measureTrack('#seek-track')
+	const sec = seekSecFromX(touchX(e))
+	if (sec == null) {
+		onSeekChange({ detail: { value: NaN } })
+		return
+	}
+	onSeekChange({ detail: { value: sec } })
+}
+
+const {
+	sleepPickMin,
+	sleepRemainSec,
+	sleepUntilEnd,
+	sleepActive,
+	onTimerMaskClose,
+	pickTimer,
+	onTimer,
+} = sleep
 </script>
 
 <style scoped lang="scss">
@@ -805,10 +551,17 @@ onUnmounted(() => {
 	min-height: 100vh;
 	height: 100vh;
 	overflow: hidden;
-	background: #160907;
+	background: #0a0a0a;
 	font-family: $manna-font-body;
 	display: flex;
 	flex-direction: column;
+}
+
+.page--mini {
+	background: transparent;
+	pointer-events: none;
+	height: auto;
+	min-height: 0;
 }
 
 .page__bg {
@@ -824,9 +577,14 @@ onUnmounted(() => {
 	left: 0;
 	right: 0;
 	bottom: 0;
-	height: 70%;
+	height: 72%;
 	z-index: 0;
-	background: linear-gradient(180deg, rgba(66, 26, 21, 0) 0%, #160907 30%);
+	background: linear-gradient(
+		180deg,
+		rgba(10, 10, 10, 0) 0%,
+		rgba(10, 10, 10, 0.55) 36%,
+		#0a0a0a 78%
+	);
 }
 
 .top, .head, .verses, .dock { position: relative; z-index: 1; }
@@ -834,23 +592,25 @@ onUnmounted(() => {
 .top {
 	display: flex;
 	align-items: center;
-	padding: 20rpx 40rpx 0;
+	justify-content: flex-end;
+	padding: 12rpx 28rpx 0;
 }
 
-.top__spacer { flex: 1; }
-
-.top__close {
-	width: 64rpx;
-	height: 64rpx;
+.top__down {
+	width: 72rpx;
+	height: 72rpx;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 }
 
-.top__close-ico { width: 48rpx; height: 48rpx; }
+.top__down-ico {
+	width: 48rpx;
+	height: 48rpx;
+}
 
 .head {
-	padding: 24rpx 48rpx 8rpx;
+	padding: 8rpx 48rpx 12rpx;
 }
 
 .head__title {
@@ -858,48 +618,64 @@ onUnmounted(() => {
 	font-weight: 700;
 	font-size: 48rpx;
 	color: #fff;
+	letter-spacing: -0.4rpx;
 }
 
 .verses {
 	flex: 1;
 	min-height: 0;
 	height: 0;
-	padding-bottom: 24rpx;
+	overflow-anchor: none;
+	background: transparent;
 }
 
 .verse {
 	display: flex;
-	gap: 16rpx;
-	padding: 20rpx 48rpx;
+	& > *:not(:first-child) { margin-left: 16rpx; }
+	padding: 14rpx 48rpx;
 	align-items: flex-start;
+	overflow-anchor: none;
 }
 
-.verse--dim { opacity: 0.3; }
+.verse--dim {
+	opacity: 1;
+}
 
 .verse__n {
 	font-weight: 300;
-	font-size: 24rpx;
-	color: rgba(255, 255, 255, 0.5);
+	font-size: 22rpx;
+	color: rgba(255, 255, 255, 0.32);
 	padding-top: 8rpx;
 	flex-shrink: 0;
+	min-width: 28rpx;
 }
 
 .verse__t {
 	flex: 1;
 	font-weight: 300;
-	font-size: 32rpx;
-	line-height: 56rpx;
-	color: #fff;
-	letter-spacing: 0.32rpx;
+	font-size: 28rpx;
+	line-height: 44rpx;
+	color: rgba(255, 255, 255, 0.34);
+	letter-spacing: 0.2rpx;
+}
+
+.verse--active .verse__n {
+	color: rgba(255, 255, 255, 0.55);
+	padding-top: 12rpx;
 }
 
 .verse--active .verse__t {
-	font-weight: 400;
-	font-size: 48rpx;
-	line-height: 80rpx;
+	font-weight: 600;
+	font-size: 44rpx;
+	line-height: 60rpx;
+	color: #fff;
 }
 
-.verses__pad { height: 40rpx; }
+/* 底部留白让后半章也能滚到视口上方，避免 scroll-into-view 卡在底部 */
+.verses__pad {
+	height: 52vh;
+	flex-shrink: 0;
+}
 
 .empty {
 	display: block;
@@ -910,7 +686,8 @@ onUnmounted(() => {
 }
 
 .dock {
-	padding: 16rpx 48rpx calc(40rpx + env(safe-area-inset-bottom, 0px));
+	padding: 8rpx 48rpx calc(28rpx + env(safe-area-inset-bottom, 0px));
+	background: transparent;
 }
 
 .tools {
@@ -952,7 +729,7 @@ onUnmounted(() => {
 .prog {
 	display: flex;
 	align-items: center;
-	gap: 16rpx;
+	& > *:not(:first-child) { margin-left: 16rpx; }
 	margin-bottom: 36rpx;
 }
 
@@ -972,7 +749,7 @@ onUnmounted(() => {
 	position: relative;
 	flex: 1;
 	min-width: 0;
-	height: 40rpx;
+	height: 56rpx;
 	display: flex;
 	align-items: center;
 	overflow: visible;
@@ -1020,10 +797,15 @@ onUnmounted(() => {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 8rpx;
+	padding-top: 32rpx;
+	& > *:not(:first-child) { margin-top: 8rpx; }
 }
 
-.side--mid { padding-top: 8rpx; }
+.side--mid {
+	height: 128rpx;
+	padding-top: 0;
+	justify-content: center;
+}
 
 .side__ico {
 	width: 64rpx;
@@ -1042,42 +824,29 @@ onUnmounted(() => {
 }
 
 .play {
+	position: relative;
+	z-index: 2;
 	width: 128rpx;
 	height: 128rpx;
+	flex-shrink: 0;
 	border-radius: 50%;
 	background: rgba(255, 255, 255, 0.2);
 	box-shadow: 0 0 32rpx rgba(0, 0, 0, 0.25);
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	margin-top: -8rpx;
 }
 
 .play__ico {
 	width: 56rpx;
 	height: 56rpx;
+	margin-left: 6rpx;
 	pointer-events: none;
-}
-
-.play__triangle {
-	width: 56rpx;
-	height: 56rpx;
-	margin-left: 4rpx;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	pointer-events: none;
-}
-
-.play__triangle-svg {
-	width: 100%;
-	height: 100%;
-	display: block;
 }
 
 .play__pause {
 	display: flex;
-	gap: 16rpx;
+	& > *:not(:first-child) { margin-left: 16rpx; }
 	align-items: center;
 }
 
@@ -1088,16 +857,70 @@ onUnmounted(() => {
 	background: #fff;
 }
 
+.dl {
+	position: fixed;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 100000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, 0);
+}
+
+.dl__box {
+	min-width: 200rpx;
+	padding: 28rpx 40rpx;
+	border-radius: 16rpx;
+	background: rgba(17, 17, 17, 0.92);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+
+.dl__t {
+	color: #ffffff;
+	font-size: 28rpx;
+	line-height: 40rpx;
+	text-align: center;
+}
+
 .mask {
 	position: fixed;
-	inset: 0;
-	z-index: 80;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	width: 100%;
+	height: 100%;
+	z-index: 99999;
 	background: rgba(0, 0, 0, 0.45);
-	display: flex;
-	align-items: flex-end;
+	box-sizing: border-box;
+}
+
+/* 底部播放键留在遮罩外面，安卓上调配乐音量时仍能点播放/暂停 */
+.mask--dock {
+	bottom: calc(200rpx + env(safe-area-inset-bottom, 0px));
+	height: auto;
+}
+
+.mask__hit {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 100%;
+	z-index: 0;
 }
 
 .msheet {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 1;
 	width: 100%;
 	background: #24110e;
 	border-radius: 32rpx 32rpx 0 0;
@@ -1105,7 +928,7 @@ onUnmounted(() => {
 	box-sizing: border-box;
 	display: flex;
 	flex-direction: column;
-	gap: 20rpx;
+	& > *:not(:first-child) { margin-top: 20rpx; }
 }
 
 .msheet__handle {
@@ -1135,7 +958,7 @@ onUnmounted(() => {
 .msheet__slider {
 	display: flex;
 	align-items: center;
-	gap: 16rpx;
+	& > *:not(:first-child) { margin-left: 16rpx; }
 	margin-top: 8rpx;
 }
 
@@ -1145,9 +968,42 @@ onUnmounted(() => {
 	min-width: 56rpx;
 }
 
-.msheet__bar {
+.vslider {
 	flex: 1;
-	margin: 0;
+	min-width: 0;
+	height: 56rpx;
+	display: flex;
+	align-items: center;
+}
+
+.vslider__rail {
+	position: relative;
+	width: 100%;
+	height: 8rpx;
+	border-radius: 20rpx;
+	background: rgba(255, 255, 255, 0.18);
+}
+
+.vslider__fill {
+	position: absolute;
+	left: 0;
+	top: 0;
+	height: 100%;
+	border-radius: 20rpx;
+	background: #fff;
+	pointer-events: none;
+}
+
+.vslider__knob {
+	position: absolute;
+	top: 50%;
+	width: 28rpx;
+	height: 28rpx;
+	margin-left: -14rpx;
+	margin-top: -14rpx;
+	border-radius: 50%;
+	background: #fff;
+	pointer-events: none;
 }
 
 .msheet__pct {
@@ -1159,7 +1015,7 @@ onUnmounted(() => {
 
 .msheet__presets {
 	display: flex;
-	gap: 12rpx;
+	& > *:not(:first-child) { margin-left: 12rpx; }
 	margin-top: 8rpx;
 }
 
@@ -1190,7 +1046,7 @@ onUnmounted(() => {
 .tlist {
 	display: flex;
 	flex-direction: column;
-	gap: 8rpx;
+	& > *:not(:first-child) { margin-top: 8rpx; }
 	margin-top: 4rpx;
 }
 
@@ -1220,5 +1076,207 @@ onUnmounted(() => {
 	font-weight: 600;
 }
 
+/* 下载本书弹层：暖棕底 + 顶部指示条 */
+.dsheet {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 1;
+	width: 100%;
+	padding: 24rpx 48rpx calc(64rpx + env(safe-area-inset-bottom, 0px));
+	border-radius: 40rpx 40rpx 0 0;
+	box-sizing: border-box;
+	background: linear-gradient(150deg, #8d4e39 0%, #7c4531 44%, #6b3727 100%);
+	display: flex;
+	flex-direction: column;
+}
+
+.dsheet__handle {
+	align-self: center;
+	width: 96rpx;
+	height: 8rpx;
+	border-radius: 8rpx;
+	background: rgba(255, 246, 240, 0.42);
+}
+
+.dsheet__head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: 120rpx;
+}
+
+.dsheet__title {
+	font-family: $manna-font-body;
+	font-size: 36rpx;
+	font-weight: 700;
+	line-height: 1.2;
+	color: #fff;
+	letter-spacing: -0.4rpx;
+}
+
+.dsheet__wifi {
+	width: 40rpx;
+	height: 40rpx;
+	opacity: 0.9;
+	flex-shrink: 0;
+	margin-left: 24rpx;
+}
+
+.dsheet__row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: 64rpx;
+}
+
+.dsheet__meta {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.dsheet__book {
+	font-family: $manna-font-body;
+	font-size: 36rpx;
+	font-weight: 700;
+	line-height: 1.2;
+	color: #fff;
+	letter-spacing: -0.4rpx;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.dsheet__sub {
+	margin-top: 10rpx;
+	font-family: $manna-font-body;
+	font-size: 24rpx;
+	font-weight: 300;
+	line-height: 1.2;
+	color: rgba(255, 255, 255, 0.58);
+}
+
+.dsheet__btn {
+	flex-shrink: 0;
+	margin-left: 32rpx;
+	height: 80rpx;
+	padding: 0 40rpx;
+	box-sizing: border-box;
+	border-radius: 999rpx;
+	border: 2rpx solid rgba(255, 255, 255, 0.9);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.dsheet__btn--busy,
+.dsheet__btn--done {
+	border-color: rgba(255, 255, 255, 0.62);
+}
+
+.dsheet__btn-t {
+	font-family: $manna-font-body;
+	font-size: 28rpx;
+	font-weight: 600;
+	color: #fff;
+	white-space: nowrap;
+}
+
+.dsheet__btn--busy .dsheet__btn-t,
+.dsheet__btn--done .dsheet__btn-t {
+	color: rgba(255, 255, 255, 0.92);
+}
+
+.dsheet__btn-ico {
+	width: 28rpx;
+	height: 28rpx;
+	margin-right: 10rpx;
+	flex-shrink: 0;
+}
+
+/* 真实进度圆环：conic-gradient 打底 + 径向遮罩挖空成环（用百分比，避免 rpx 在 mask 里不换算） */
+.dsheet__ring {
+	width: 34rpx;
+	height: 34rpx;
+	margin-right: 12rpx;
+	flex-shrink: 0;
+	border-radius: 50%;
+	-webkit-mask: radial-gradient(closest-side, transparent 72%, #000 76%);
+	mask: radial-gradient(closest-side, transparent 72%, #000 76%);
+}
+
 .press { opacity: 0.72; }
+
+.mini {
+	position: fixed;
+	left: 50%;
+	transform: translateX(-50%);
+	bottom: calc(32rpx + env(safe-area-inset-bottom, 0px));
+	z-index: 20;
+	@include manna-listen-mini;
+}
+
+.mini__play {
+	width: 72rpx;
+	height: 72rpx;
+	border-radius: 50%;
+	background: #ffffff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-right: 16rpx;
+	flex-shrink: 0;
+	box-shadow: 0 8rpx 20rpx rgba(33, 33, 33, 0.12);
+}
+
+.mini__ico {
+	width: 36rpx;
+	height: 36rpx;
+}
+
+.mini__ico--play {
+	filter: brightness(0);
+	width: 28rpx;
+	height: 28rpx;
+	margin-left: 4rpx;
+}
+
+.mini__meta { flex: 1; min-width: 0; }
+
+.mini__t {
+	display: block;
+	font-family: $manna-font-body;
+	color: $manna-btn-text;
+	font-weight: 700;
+	font-size: 28rpx;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mini__m {
+	display: block;
+	font-family: $manna-font-body;
+	color: rgba(33, 33, 33, 0.45);
+	font-size: 22rpx;
+	margin-top: 4rpx;
+}
+
+.mini__close {
+	width: 56rpx;
+	height: 56rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+}
+
+.mini__x {
+	width: 40rpx;
+	height: 40rpx;
+	filter: brightness(0) opacity(0.45);
+}
 </style>

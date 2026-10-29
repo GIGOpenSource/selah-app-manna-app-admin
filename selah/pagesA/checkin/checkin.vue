@@ -14,7 +14,7 @@
 			<view class="orbit" />
 			<view v-for="i in 12" :key="'tk'+i" class="tick" :style="tickStyle(i)" />
 			<view class="badge">
-				<text class="big">{{ status.streak_days || 0 }}</text>
+				<text class="big">{{ streakDays }}</text>
 			</view>
 		</view>
 
@@ -23,9 +23,9 @@
 		<view class="card">
 			<text class="card-lead">{{ t('checkin_sub') }}</text>
 			<view class="week">
-				<view v-for="(d, i) in (status.week || [])" :key="d.date || i" class="day-col">
-					<text class="dow" :class="{ on: d.state === 'checked' || d.state === 'frozen' }">{{ ['Mo','Tu','We','Th','Fr','Sa','Su'][i] || '' }}</text>
-					<view class="day" :class="d.state">
+				<view v-for="(d, i) in weekDays" :key="d.date || i" class="day-col">
+					<text class="dow" :class="{ on: d.state === 'checked' || d.state === 'frozen' || d.is_today }">{{ d.label }}</text>
+					<view class="day" :class="[d.state || 'empty', { today: d.is_today }]">
 						<text v-if="d.state === 'checked'">✓</text>
 						<text v-else-if="d.state === 'frozen'">❄</text>
 					</view>
@@ -53,7 +53,7 @@
 			<view
 				v-else
 				class="cta"
-				@click="share"
+				@click="onContinue"
 			>
 				<text class="cta-text">{{ t('continue') || t('share_streak') }}</text>
 			</view>
@@ -70,18 +70,25 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { ref, computed, onMounted } from 'vue'
+import { t } from '@/i18n/index.js'
 import { apiCheckinStatus, apiCheckinDo } from '@/api/checkin.js'
-import { track } from '@/utils/analytics.js'
+import { logFirebaseEvent } from '@/utils/firebase.js'
 import { localizeCheckinPopup } from '@/utils/checkinPopup.js'
-import { safeBack } from '@/utils/nav.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
+import { buildCalendarWeek, streakWeekLabels, resolveStreakDays } from '@/utils/streakWeek.js'
+import { safeBack } from '@/utils/nav.js'
+import { openSharePage } from '@/utils/share.js'
 
-const { t } = useI18n()
 const statusBarPx = getStatusBarPx()
 const status = ref({})
 const lastPopup = ref(null)
+const streakDays = computed(() => resolveStreakDays(status.value, 0))
+const weekDays = computed(() => buildCalendarWeek(
+	streakDays.value,
+	status.value.week || [],
+	streakWeekLabels(t),
+))
 
 function tickStyle(i) {
 	const deg = (i - 1) * 30
@@ -93,10 +100,17 @@ function tickStyle(i) {
 async function load() {
 	const res = await apiCheckinStatus()
 	status.value = res.results || {}
+	if (status.value.already || status.value.can_checkin_today === false) {
+		const d = new Date()
+		const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+		uni.setStorageSync('selah_checkin_done_day', day)
+		uni.setStorageSync('selah_checkin_popup_day', day)
+	}
 }
 
 onMounted(async () => {
 	await load()
+	try { logFirebaseEvent('streak_detail_show', { streak_days: Number(streakDays.value || 0) }) } catch (e) {}
 })
 
 function goBack() {
@@ -104,36 +118,36 @@ function goBack() {
 }
 
 async function doCheckin() {
-	track('checkin_show', { scene: 'manual' })
 	const res = await apiCheckinDo()
 	const data = res.results || {}
+	const d = new Date()
+	const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+	uni.setStorageSync('selah_checkin_done_day', day)
+	uni.setStorageSync('selah_checkin_popup_day', day)
 	if (data.already) {
-		track('checkin_already')
 		await load()
 		return
 	}
 	lastPopup.value = localizeCheckinPopup(data, t)
-	track('checkin_success', {
-		streak_days: data.streak_days,
-		granted_quota: data.granted_quota,
-		hit_cap: data.hit_cap,
-		vip_level: data.vip_level,
-		frozen_days: (data.frozen_days || []).length,
-	})
-	if ((data.frozen_days || []).length) {
-		track('checkin_freeze', { used_hearts: (data.frozen_days || []).length })
-	}
-	if (data.scenario === 'restart') {
-		track('checkin_reset', { streak_days: data.streak_days })
-	}
+	const days = resolveStreakDays(data, 0)
+	try { logFirebaseEvent('daily_checkin_result', { streak_days: days }) } catch (e) {}
+	try { logFirebaseEvent('reward_grant_result', { rewardCount: Number(data.granted_quota || 0) }) } catch (e) {}
 	await load()
 }
 
+function openStreakShare() {
+	const days = Number(streakDays.value || 0)
+	openSharePage({ mode: 'streak', days })
+}
+
+function onContinue() {
+	try { logFirebaseEvent('streak_continue_click', { streak_days: Number(streakDays.value || 0) }) } catch (e) {}
+	openStreakShare()
+}
+
 function share() {
-	track('checkin_share', { streak_days: status.value.streak_days })
-	uni.navigateTo({
-		url: `/pagesA/share/share?mode=streak&days=${status.value.streak_days || 0}`,
-	})
+	try { logFirebaseEvent('profile_streakDetail_share', { streak_days: Number(streakDays.value || 0) }) } catch (e) {}
+	openStreakShare()
 }
 </script>
 
@@ -271,6 +285,7 @@ function share() {
 .week {
 	display: flex;
 	flex-direction: row;
+	direction: ltr;
 	justify-content: space-between;
 }
 .day-col {
@@ -288,18 +303,24 @@ function share() {
 	width: 56rpx;
 	height: 56rpx;
 	border-radius: 50%;
-	background: #f0ebe3;
+	background: transparent;
+	border: 3rpx solid #e6e0d6;
+	box-sizing: border-box;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	font-size: 22rpx;
+	color: #ffffff;
 }
 .day.checked {
-	background: linear-gradient(145deg, #c5c3e8, #b6badf);
-	color: #191919;
+	background: #f3b4c4;
+	border-color: #f3b4c4;
+	color: #ffffff;
 }
 .day.frozen {
-	background: #d0d0d0;
+	background: #cfcfcf;
+	border-color: #cfcfcf;
+	color: #ffffff;
 }
 .foot-bar {
 	margin-top: auto;

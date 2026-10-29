@@ -1,6 +1,6 @@
 <!--
   冷启闸：主包入口页（分包 Welcome 不能做第一页）。
-  默认只占位；路由由 App.onLaunch 负责。超时仍停在本页时再兜底一次。
+  在本页 onMounted 后再 reLaunch，避免 App.onLaunch 同步跳转导致安卓点击失效。
 -->
 <template>
 	<view class="boot">
@@ -12,12 +12,17 @@
 <script setup>
 import { onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ensureLogin, shouldForceLoginPage } from '@/utils/session.js'
-import { routeAfterLogin } from '@/utils/coldStart.js'
+import { ensureLogin, shouldForceLoginPage, hasLocalSession } from '@/utils/session.js'
+import { setUserProps } from '@/utils/analytics.js'
+import { routeAfterLogin, safeRelaunch } from '@/utils/coldStart.js'
+import { refreshBootstrapCaches } from '@/utils/bootstrap.js'
+import { getCurrentLanguage } from '@/utils/storageKeys.js'
+import { queueDeletionPrompt } from '@/utils/accountDeletion.js'
+import { consumeAlarmOpenPage, peekAlarmRinging } from '@/utils/alarmClock.js'
 
 const { t } = useI18n()
-let timer = null
 let left = false
+let started = false
 
 function stillOnBoot() {
 	try {
@@ -30,32 +35,53 @@ function stillOnBoot() {
 	}
 }
 
-async function fallbackRoute() {
-	if (left || !stillOnBoot()) return
-	if (shouldForceLoginPage()) {
-		uni.reLaunch({ url: '/pagesA/welcome/welcome' })
+async function startRoute() {
+	if (left || started) return
+	started = true
+	const alarmPage = consumeAlarmOpenPage()
+	if (alarmPage) {
+		safeRelaunch(alarmPage)
+		return
+	}
+	if (peekAlarmRinging()) {
+		safeRelaunch('/pagesA/alarm/ring')
+		return
+	}
+	if (shouldForceLoginPage() || !hasLocalSession()) {
+		safeRelaunch('/pagesA/welcome/welcome')
 		return
 	}
 	try {
 		const user = await ensureLogin()
 		if (left || !stillOnBoot()) return
+		queueDeletionPrompt(user)
+		refreshBootstrapCaches().catch(() => {})
+		setUserProps({
+			user_id: user.user_id,
+			vip_level: user.vip_level,
+			register_country: user.register_country || '',
+			gender: user.gender || '',
+			faith_type: user.faith_type,
+			prayer_frequency: user.prayer_frequency,
+			login_type: user.login_type,
+			system_lang: user.system_lang || getCurrentLanguage() || 'en',
+		})
 		await routeAfterLogin(user)
 	} catch (e) {
 		if (left || !stillOnBoot()) return
-		uni.reLaunch({ url: '/pagesA/welcome/welcome' })
+		safeRelaunch('/pagesA/welcome/welcome')
 	}
 }
 
 onMounted(() => {
-	// 给 App.onLaunch 优先权；卡住再兜底，避免与 launch 双路由
-	timer = setTimeout(() => {
-		fallbackRoute()
-	}, 1200)
+	// 下一帧再跳，保证首屏 webview 事件已就绪
+	setTimeout(() => {
+		startRoute()
+	}, 32)
 })
 
 onUnmounted(() => {
 	left = true
-	if (timer) clearTimeout(timer)
 })
 </script>
 

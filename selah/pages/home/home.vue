@@ -2,66 +2,138 @@
   首页 Feed：滑动语录、点赞/收藏/举报、壁纸背景、签到入口与新人引导。
 -->
 <template>
-	<view class="home">
-		<image v-if="bgUrl" class="bg" :src="bgUrl" mode="aspectFill" />
+	<view :class="['home', bgVideoUrl ? 'has-dyn-bg' : '']">
+		<image v-if="bgUrl && !bgVideoUrl" class="bg" :src="bgUrl" mode="aspectFill" @error="onBgError" />
+		<video
+			v-if="bgVideoUrl"
+			id="homeBgVideo"
+			class="bg bg-video"
+			:src="bgVideoUrl"
+			:autoplay="true"
+			:loop="true"
+			:muted="true"
+			:controls="false"
+			:playsinline="true"
+			:show-center-play-btn="false"
+			:show-play-btn="false"
+			:show-fullscreen-btn="false"
+			:show-mute-btn="false"
+			:show-loading="false"
+			:enable-progress-gesture="false"
+			object-fit="cover"
+			@error="onBgVideoError"
+		/>
 		<view class="veil" />
 
 		<!-- 顶栏：稿 Status bar=62、侧钮 y=62；H5 用 getStatusBarPx 回落 62 -->
 		<view class="top" :style="{ paddingTop: statusBarPx + 'px' }">
-			<view class="glass-pill" @tap.stop="goMe">
-				<image class="pill-img" src="/static/ui/ico-profile.svg" mode="aspectFit" />
-			</view>
-			<view
-				v-if="newcomer.visible"
-				class="progress-pill"
-				@tap.stop="openLikeSheet"
-			>
-				<image class="progress-ico" src="/static/ui/ico-like-on.svg" mode="aspectFit" />
-				<text class="progress-num">{{ newcomer.current }}/{{ newcomer.goal }}</text>
-				<view class="bar">
-					<view class="bar-fill" :style="{ width: Math.min(100, (newcomer.current / newcomer.goal * 100)) + '%' }" />
+			<view class="top-left">
+				<view class="glass-pill" @click.stop="goMe">
+					<image class="pill-img" src="/static/ui/ico-profile.svg" mode="aspectFit" />
+				</view>
+				<view class="glass-pill" @click.stop="toggleHomeMusic">
+					<image
+						class="pill-img"
+						:src="musicPlaying ? '/static/ui/ico-music-pause.svg' : '/static/ui/ico-music.svg'"
+						mode="aspectFit"
+					/>
 				</view>
 			</view>
-			<view v-else class="brand-wrap">
-				<text class="brand">{{ brandLabel }}</text>
+			<!-- 点满后进度条消失，槽位仍占位，避免右侧图标被 flex 挤偏 -->
+			<view class="progress-slot">
+				<view
+					v-if="showNewcomerProgress"
+					class="progress-pill"
+					@click.stop="openLikeSheet"
+				>
+					<image class="progress-ico" src="/static/ui/ico-like-on.svg" mode="aspectFit" />
+					<text class="progress-num">{{ newcomer.current }}/{{ newcomer.goal }}</text>
+					<view class="bar">
+						<view class="bar-fill" :style="{ width: Math.min(100, (newcomer.goal ? newcomer.current / newcomer.goal * 100 : 0)) + '%' }" />
+					</view>
+				</view>
 			</view>
-			<view class="glass-pill" @tap.stop="user.vip_level === 'free' ? goVip('quote_home') : go('/pagesA/wallpaper/wallpaper')">
+			<view class="glass-pill" @click.stop="goVip('quote_home')">
 				<image class="pill-img" src="/static/ui/ico-vip.svg" mode="aspectFit" />
 			</view>
 		</view>
 
 		<swiper
+			:key="feedSwiperKey"
 			class="feed"
 			vertical
 			:current="current"
-			@change="onSwipe"
+			:duration="280"
 			:circular="false"
+			:disable-touch="true"
+			:style="{ backgroundColor: 'transparent' }"
+			@change="onSwipe"
 		>
 			<swiper-item v-for="(q, idx) in list" :key="q.id">
-				<view class="card">
+				<view
+					:class="['card', bgVideoUrl ? 'card-dyn' : '']"
+					@touchstart="onFeedTouchStart"
+					@touchmove.stop.prevent="onFeedTouchMove"
+					@touchend="onFeedTouchEnd"
+					@touchcancel="onFeedTouchEnd"
+				>
+					<image
+						v-if="bgUrl && !bgVideoUrl"
+						class="card-bg"
+						:src="bgUrl"
+						mode="aspectFill"
+					/>
+					<view v-if="!bgVideoUrl" class="card-veil" />
 					<!-- 语录块：稿 Frame36 y=311/812 -->
 					<view class="quote-block">
 						<text class="quote">{{ q.content }}</text>
-						<text v-if="q.source_ref" class="cite">-{{ q.source_ref }}</text>
+						<!-- <text v-if="q.source_ref" class="cite">-{{ q.source_ref }}</text> -->
 					</view>
-					<view v-if="q.locked" class="lock-mask" @tap.stop="goVip('quote_lock')">
-						<text class="lock-text">{{ t('vip_content') }}</text>
-						<text class="lock-cta">{{ t('unlock_vip') }}</text>
+					<view v-if="q.locked" class="lock-hit">
+						<view class="lock-hit-close" @click.stop="dismissLockHit">
+							<image class="lock-hit-close-ico" src="/static/ui/ico-close.svg" mode="aspectFit" />
+						</view>
+						<view class="lock-hit-body" @click.stop="onLockTap">
+							<text class="lock-hit-text">{{ t('vip_content') }}</text>
+							<view class="lock-hit-cta-row">
+								<text class="lock-hit-cta">{{ t('unlock_vip') }}</text>
+								<image class="lock-hit-arrow" src="/static/ui/ico-chevron.svg" mode="aspectFit" />
+							</view>
+						</view>
 					</view>
-					<view class="quote-hit" @longpress="openMore(q)" />
+					<view class="quote-hit" />
 				</view>
 			</swiper-item>
 		</swiper>
 
+		<selah-vip-lock
+			v-if="vipLockOpen"
+			mode="overlay"
+			:pay-trigger-source="vipLockSource"
+			:lock-content-id="activeQuote?.id || ''"
+			@close="closeVipLock"
+			@activated="onVipActivated"
+		/>
+
 		<!-- Share/Like：稿 Frame41 y=662；挂根层避免 swiper 裁切 -->
 		<view v-if="activeQuote && !activeQuote.locked" class="mid-actions">
-			<view class="icon-btn" @tap.stop="goShare(activeQuote)">
+			<view class="icon-btn" @click.stop="goShare(activeQuote)">
 				<image class="act-img" src="/static/ui/ico-share.svg" mode="aspectFit" />
 			</view>
-			<view class="icon-btn" @tap.stop="toggleLike(activeQuote)">
+			<view class="icon-btn" :class="{ liked: isActiveLiked }" @click.stop="toggleLike(activeQuote)">
+				<!-- App 端仅改 :src 常不刷新，按态拆开两个 image -->
 				<image
+					v-if="isActiveLiked"
+					:key="'like-on-' + activeQuote.id + '-' + likeTick"
 					class="act-img"
-					:src="liked[activeQuote.id] ? '/static/ui/ico-like-on.svg' : '/static/ui/ico-like.svg'"
+					src="/static/ui/ico-like-on.svg"
+					mode="aspectFit"
+				/>
+				<image
+					v-else
+					:key="'like-off-' + activeQuote.id + '-' + likeTick"
+					class="act-img"
+					src="/static/ui/ico-like.svg"
 					mode="aspectFit"
 				/>
 			</view>
@@ -69,72 +141,53 @@
 
 		<!-- Dock：稿 y=734 -->
 		<view class="dock">
-			<view class="glass-pill" @tap.stop="go('/pagesA/topics/topics')">
+			<view class="glass-pill" @click.stop="onTopicsClick">
 				<image class="pill-img" src="/static/ui/ico-star.svg" mode="aspectFit" />
 			</view>
-			<view class="glass-pill prayer" @tap.stop="goAi">
+			<view class="glass-pill prayer" @click.stop="goAi">
 				<image class="pill-img" src="/static/ui/ico-prayer.svg" mode="aspectFit" />
 				<text class="prayer-text">{{ t('prayer') }}</text>
 			</view>
-			<view class="glass-pill" @tap.stop="go('/pagesA/wallpaper/wallpaper')">
+			<view class="glass-pill" @click.stop="onThemesClick">
 				<image class="pill-img" src="/static/ui/ico-paint.svg" mode="aspectFit" />
 			</view>
 		</view>
 
-		<view v-if="bindBanner" class="bind-banner" @click="openBindBanner">
-			<text class="bind-text">{{ t('bind_tip') }}</text>
-			<text class="bind-x" @click.stop="dismissBind">×</text>
-		</view>
-
-		<!-- 新人任务说明 -->
-		<u-popup :show="showLikeSheet" mode="bottom" @close="closeLikeSheet" bgColor="#f5f5f5" round="16">
-			<view class="sheet">
-				<text class="sheet-title">{{ newcomerTitle }}</text>
-				<text class="sheet-desc">{{ newcomerDesc }}</text>
-				<view class="sheet-cta" @tap="closeLikeSheet">
-					<text class="sheet-cta-text">{{ t('got_it') }}</text>
-				</view>
-			</view>
-		</u-popup>
+		<!-- 新人任务说明（不用 u-popup：离线打包易失效） -->
+		<selah-dialog
+			v-model:visible="showLikeSheet"
+			:title="newcomerTitle"
+			:content="newcomerDesc"
+			:confirm-text="t('got_it')"
+			:show-cancel="false"
+			@confirm="onLikeSheetConfirm"
+			@cancel="onLikeSheetDismiss"
+		/>
 
 		<!-- 打卡弹层 -->
-		<u-popup :show="!!checkinPopup" mode="center" @close="checkinPopup = null" bgColor="transparent">
-			<view class="checkin-pop" v-if="checkinPopup">
-				<text class="cp-title">{{ checkinPopup.title }}</text>
-				<text class="cp-sub">{{ checkinPopup.subtitle }}</text>
-				<text v-if="checkinPopup.quota_line" class="cp-quota">{{ checkinPopup.quota_line }}</text>
-				<view class="week">
-					<view v-for="d in week" :key="d.date" class="day" :class="d.state">
-						<text v-if="d.state === 'checked'">✓</text>
-						<text v-else-if="d.state === 'frozen'">❄</text>
-					</view>
-				</view>
-				<view class="sheet-cta" @tap="checkinPopup = null">
-					<text class="sheet-cta-text">{{ checkinPopup.cta }}</text>
-				</view>
-			</view>
-		</u-popup>
+		<selah-dialog
+			:visible="!!checkinPopup"
+			:title="(checkinPopup && checkinPopup.title) || ''"
+			:content="(checkinPopup && checkinPopup.subtitle) || ''"
+			:confirm-text="(checkinPopup && checkinPopup.cta) || t('got_it')"
+			:show-cancel="false"
+			:extra="checkinDialogExtra"
+			@update:visible="onCheckinPopupVisible"
+			@confirm="onCheckinContinue"
+			@cancel="checkinPopup = null"
+		/>
 
-		<selah-sheet
-			v-model:visible="moreSheetOpen"
-			:title="t('more') || 'More'"
-			:items="moreSheetItems"
-			:cancel-text="t('cancel')"
-			@select="onMoreSelect"
+		<selah-widget-nudge
+			:visible="widgetNudgeOpen"
+			:quote="(activeQuote && activeQuote.content) || ''"
+			@learn="onWidgetLearn"
+			@dismiss="closeWidgetNudge"
 		/>
-		<selah-sheet
-			v-model:visible="reportSheetOpen"
-			:title="t('report')"
-			:items="reportSheetItems"
-			:cancel-text="t('cancel')"
-			@select="onReportSelect"
-		/>
-		<selah-sheet
-			v-model:visible="folderSheetOpen"
-			:title="t('collect')"
-			:items="folderSheetItems"
-			:cancel-text="t('cancel')"
-			@select="onFolderSelect"
+		<selah-discount-nudge
+			:visible="discountNudgeOpen"
+			@continue="onDiscountContinue"
+			@dismiss="closeDiscountNudge"
+			@activated="onDiscountActivated"
 		/>
 
 		<!-- 完成动效 -->
@@ -145,561 +198,282 @@
 		<view v-if="burstShow" class="burst">
 			<text class="burst-heart">♥</text>
 		</view>
+		<selah-deletion-prompt />
 	</view>
 </template>
 
 <script setup>
 /**
- * 首页 Feed：预取/缓存、新人点赞进度、VIP 遮罩、签到弹窗、朗读、举报与绑定引导。
+ * 首页 Feed：预取/缓存、新人点赞进度、VIP 遮罩、签到弹窗、朗读与举报。
  */
-import { ref, computed, onMounted } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onMounted, watch } from 'vue'
+import { onShow, onHide } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
-import { apiFeed, apiExpose, apiLike, apiDislike, apiCollect, apiReport, apiNewcomerLike, apiAppConfig, apiFolders, apiContentEnums } from '@/api/content.js'
-import { apiCheckinDo } from '@/api/checkin.js'
-import { apiDismissBindPrompt } from '@/api/auth.js'
-import { ensureLogin, getUser, setUser, shouldForceLoginPage } from '@/utils/session.js'
-import { track } from '@/utils/analytics.js'
-import { playSfx } from '@/utils/sfx.js'
-import { localizeCheckinPopup } from '@/utils/checkinPopup.js'
-import { readPageCache, writePageCache, loadWithCache } from '@/utils/pageCache.js'
+import { apiAppConfig } from '@/api/content.js'
+import { ensureLogin, getUser, shouldForceLoginPage, hasLocalSession } from '@/utils/session.js'
+import { readPageCache, loadWithCache } from '@/utils/pageCache.js'
+import { peekHomeForceQuote, consumeHomeForceQuote, getHomeFeedTopicId } from '@/utils/homeFeedSync.js'
 import { hideNativeTabBar } from '@/utils/tabbar.js'
 import { getStatusBarPx } from '@/utils/safeArea.js'
-import { APP_CONFIG_KEY, resolveActiveWallpaper, wallpaperDisplayUrl } from '@/utils/wallpaperCache.js'
+import { APP_CONFIG_KEY, playWallpaperVideo } from '@/utils/wallpaperCache.js'
 import { appConfigRevision } from '@/utils/bootstrap.js'
-import { goVip as navigateVip } from '@/utils/vip.js'
-import { createTapLock } from '@/utils/tapLock.js'
-
-const HOME_CACHE_KEY = 'home_v1'
-/** 首屏条数 */
-const FEED_FIRST_PAGE = 12
-/** 静默/滑动补货每批 */
-const FEED_BATCH = 10
-/** 会话内列表软上限（非无限滚动） */
-const FEED_SOFT_CAP = 48
-/** 前方剩余 ≤ 此值时再补货 */
-const FEED_LOW_WATER = 6
-/** 首屏就绪后静默预取轮数 */
-const FEED_SILENT_ROUNDS = 2
-
-let feedLoading = false
-let feedExhausted = false
-
-/** 把 pageCache 中的 feed/newcomer/checkin 状态灌入页面（首屏秒开）。 */
-
-function applyHomeCache(snap) {
-	if (!snap || typeof snap !== 'object') return
-	if (Array.isArray(snap.list) && snap.list.length) {
-		list.value = snap.list
-		liked.value = snap.liked || {}
-	}
-	if (snap.config) config.value = snap.config
-	if (Array.isArray(snap.reportReasons) && snap.reportReasons.length) {
-		reportReasons.value = snap.reportReasons
-	}
-	if (snap.bgUrl) bgUrl.value = snap.bgUrl
-	if (snap.newcomer) newcomer.value = { ...newcomer.value, ...snap.newcomer }
-}
-
-/** 将当前 feed 与相关状态写入 pageCache，供下次进入秒开。 */
-
-function persistHomeCache() {
-	writePageCache(HOME_CACHE_KEY, {
-		list: list.value.slice(0, FEED_FIRST_PAGE + FEED_BATCH),
-		liked: liked.value,
-		config: config.value,
-		reportReasons: reportReasons.value,
-		bgUrl: bgUrl.value,
-		newcomer: newcomer.value,
-	})
-}
+import { useHomeFeed } from './useHomeFeed.js'
+import { useHomeLikeSheet } from './useHomeLikeSheet.js'
+import { useHomeCheckin } from './useHomeCheckin.js'
+import { useHomePopups } from './useHomePopups.js'
+import { useHomeMusic } from './useHomeMusic.js'
+import { logFirebaseEvent } from '@/utils/firebase.js'
 
 const { t } = useI18n()
 const statusBarPx = getStatusBarPx()
-let audioCtx = null
-const burstShow = ref(false)
+const { musicPlaying, toggleHomeMusic } = useHomeMusic({ t })
 
-/** 播放当前语录朗读 audio_url；尊重 muted；切换卡片时停上一段。 */
+/** 跨 composable 回填：newcomer / applyNewcomer / checkinPopup */
+const deps = {}
 
-function playAudio(q) {
-	if (!q.audio_url) return
-	const u = getUser() || {}
-	if (u.muted || u.sound_enabled === false) {
-		uni.showToast({ title: t('muted') || 'Muted', icon: 'none' })
-		return
-	}
-	try {
-		if (audioCtx) {
-			audioCtx.stop()
-			audioCtx.destroy()
-		}
-		audioCtx = uni.createInnerAudioContext()
-		audioCtx.src = q.audio_url
-		audioCtx.play()
-		track('quote_audio_play', { content_id: q.id })
-	} catch (e) {
-		uni.showToast({ title: t('audio_unavailable'), icon: 'none' })
-	}
+const feed = useHomeFeed({ t, deps })
+const {
+	HOME_CACHE_KEY,
+	list,
+	current,
+	feedSwiperKey,
+	liked,
+	likeTick,
+	user,
+	bgUrl,
+	bgVideoUrl,
+	config,
+	activeQuote,
+	isActiveLiked,
+	quoteLiked,
+	applyHomeCache,
+	persistHomeCache,
+	overlayPendingLikes,
+	syncHomeLikesForAccount,
+	go,
+	goAi,
+	goMe,
+	goVip,
+	onLockTap,
+	dismissLockHit,
+	vipLockOpen,
+	vipLockSource,
+	closeVipLock,
+	onVipActivated,
+	handleVipDismissCooldown,
+	goShare,
+	pauseFeedRead,
+	settleFeedRead,
+	resumeFeedRead,
+	exposeActiveQuote,
+	loadFeed,
+	homeFeedNeedsReload,
+	keepHomeLook,
+	reloadHomeFeedIfStale,
+	hydratePinnedTopicQuotes,
+	silentPrefetchFeed,
+	onFeedTouchStart,
+	onFeedTouchMove,
+	onFeedTouchEnd,
+	onSwipe,
+	applyWallpaper,
+	onBgError,
+	onBgVideoError,
+} = feed
+
+function onTopicsClick() {
+	try { logFirebaseEvent('home_topics_click') } catch (e) {}
+	go('/pagesA/explore/explore')
 }
 
-const list = ref([])
-const current = ref(0)
-const liked = ref({})
-const activeQuote = computed(() => list.value[current.value] || null)
-const user = ref(getUser())
-const newcomer = ref({ current: 0, goal: 5, visible: false, completed: false })
-const showLikeSheet = ref(false)
-const checkinPopup = ref(null)
-const week = ref([])
-const showComplete = ref(false)
-const bindBanner = ref(false)
-const moreSheetOpen = ref(false)
-const moreSheetItems = ref([])
-const moreTarget = ref(null)
-const reportSheetOpen = ref(false)
-const reportSheetItems = ref([])
-const reportTarget = ref(null)
-const folderSheetOpen = ref(false)
-const folderSheetItems = ref([])
-const folderTarget = ref(null)
-const folderList = ref([])
-const bgUrl = ref('')
-const config = ref({})
-
-function cfgText(key, i18nKey) {
-	const v = String((config.value || {})[key] || '').trim()
-	return v || t(i18nKey)
+function onThemesClick() {
+	try { logFirebaseEvent('home_themes_click') } catch (e) {}
+	go('/pagesA/topics/topics')
 }
 
-const brandLabel = computed(() => {
-	const bn = String((config.value || {}).brand_name || '').trim()
-	return bn || t('brand')
+const likeSheet = useHomeLikeSheet({
+	t,
+	config,
+	user,
+	list,
+	liked,
+	likeTick,
+	quoteLiked,
+	persistHomeCache,
+	deps,
 })
-const newcomerTitle = computed(() => cfgText('newcomer_intro_title', 'newcomer_title'))
-const newcomerDesc = computed(() => cfgText('newcomer_intro_body', 'newcomer_desc'))
-const newcomerCongrats = computed(() => cfgText('newcomer_congrats_text', 'newcomer_congrats'))
-const newcomerDone = computed(() => cfgText('newcomer_done_text', 'newcomer_done'))
-const reportReasons = ref([
-	{ value: 'inappropriate', labelKey: 'report_inappropriate' },
-	{ value: 'hate', labelKey: 'report_hate' },
-	{ value: 'spam', labelKey: 'report_spam' },
-	{ value: 'copyright', labelKey: 'report_copyright' },
-	{ value: 'other', labelKey: 'report_other' },
-])
-const REPORT_I18N = {
-	inappropriate: 'report_inappropriate',
-	hate: 'report_hate',
-	spam: 'report_spam',
-	copyright: 'report_copyright',
-	other: 'report_other',
-}
+const {
+	newcomer,
+	showNewcomerProgress,
+	showLikeSheet,
+	showComplete,
+	burstShow,
+	newcomerTitle,
+	newcomerDesc,
+	newcomerCongrats,
+	applyNewcomer,
+	maybeShowNewcomerSheet,
+	openLikeSheet,
+	closeLikeSheet,
+	loadNewcomer,
+	toggleLike,
+	setCheckinSettled,
+	getCheckinSettled,
+} = likeSheet
 
-/** 顶栏 / Dock 固定控件防抖；不影响 swiper 滑动 */
-
-const chromeTap = createTapLock(500)
-
-/** 通用分包导航（topics/checkin/share 等）。 */
-
-const go = (url) => chromeTap.run(() => uni.navigateTo({ url }))
-const goAi = () => chromeTap.run(() => uni.switchTab({ url: '/pages/ai/ai' }))
-const goMe = () => chromeTap.run(() => uni.switchTab({ url: '/pages/profile/profile' }))
-/** 跳转 VIP 页（VIP 锁遮罩 / 额度不足引导）。 */
-
-const goVip = (src) => chromeTap.run(() => {
-	track('home_enter_vip', { pay_trigger_source: src || 'quote_home' })
-	navigateVip(src || 'quote_home')
+watch(showNewcomerProgress, (on) => {
+	if (!on) return
+	try { logFirebaseEvent('like_task_show') } catch (e) {}
 })
-/** 携带当前语录 id 进入分享页。 */
 
-const goShare = (q) => chromeTap.run(() => uni.navigateTo({ url: `/pagesA/share/share?id=${q.id}` }))
+deps.newcomer = newcomer
+deps.applyNewcomer = applyNewcomer
 
-let dwellStarted = Date.now()
-let dwellContentId = null
+const checkin = useHomeCheckin({
+	t,
+	config,
+	user,
+	maybeShowNewcomerSheet,
+	setCheckinSettled,
+})
+const {
+	checkinPopup,
+	checkinDialogExtra,
+	onCheckinDialogVisible,
+	runCheckin,
+} = checkin
 
-/** 打开点赞后的收藏夹选择底栏。 */
+deps.checkinPopup = checkinPopup
+deps.showLikeSheet = showLikeSheet
+deps.vipLockOpen = vipLockOpen
+deps.getCheckinSettled = getCheckinSettled
 
-function openLikeSheet() {
-	showLikeSheet.value = true
-	track('newcomer_like_sheet_show')
+const popups = useHomePopups({ user, deps })
+const {
+	widgetNudgeOpen,
+	discountNudgeOpen,
+	noteHomeView,
+	tryShowHomePopups,
+	closeWidgetNudge,
+	closeDiscountNudge,
+} = popups
+deps.noteHomeView = noteHomeView
+
+/** 任一全屏遮挡打开则暂停有效停留；全部关闭才恢复；切后台才 settle */
+function syncFeedReadOverlay() {
+	const blocked = !!(
+		vipLockOpen.value
+		|| showLikeSheet.value
+		|| showComplete.value
+		|| widgetNudgeOpen.value
+		|| discountNudgeOpen.value
+		|| checkinPopup.value
+	)
+	if (blocked) pauseFeedRead()
+	else resumeFeedRead()
 }
-/** 关闭收藏夹选择底栏。 */
+watch(vipLockOpen, syncFeedReadOverlay)
+watch(showLikeSheet, syncFeedReadOverlay)
+watch(showComplete, syncFeedReadOverlay)
+watch(widgetNudgeOpen, syncFeedReadOverlay)
+watch(discountNudgeOpen, syncFeedReadOverlay)
+watch(checkinPopup, syncFeedReadOverlay)
 
-function closeLikeSheet() {
-	if (showLikeSheet.value) track('newcomer_like_sheet_dismiss')
-	showLikeSheet.value = false
-}
-
-/** 记录当前卡停留，满足阈值后上报 expose（推荐反馈）。 */
-
-function markDwell(nextId) {
-	if (dwellContentId != null) {
-		track('quote_dwell', {
-			content_id: dwellContentId,
-			dwell_ms: Date.now() - dwellStarted,
-		})
-	}
-	dwellContentId = nextId
-	dwellStarted = Date.now()
-}
-
-/** 组装曝光埋点参数（content_id / 位置 / 来源）。 */
-
-function quoteExposeParams(q) {
-	return {
-		content_id: q.id,
-		interest_tags: (q.interest_tags || []).join(','),
-		is_vip_content: !!q.is_vip,
-		is_cold_start: !!q.in_cold_start_pool,
-	}
-}
-
-/** 拉取 Feed（可 refresh）；成功后 merge 并 persist；触发新人进度与签到弹窗逻辑。 */
-
-async function loadFeed({ trackView = true } = {}) {
-	feedExhausted = false
-	const res = await apiFeed({ pageSize: FEED_FIRST_PAGE })
-	list.value = res.results.list || []
-	current.value = 0
-	const map = {}
-	list.value.forEach((q) => { if (q.liked) map[q.id] = true })
-	liked.value = map
-	if (list.value[0] && trackView) {
-		apiExpose(list.value[0].id)
-		track('quote_expose', quoteExposeParams(list.value[0]))
-		track('home_quote_view', { enter_ts: Date.now(), content_id: list.value[0].id })
-		markDwell(list.value[0].id)
-	}
+function onWidgetLearn() {
+	try { logFirebaseEvent('homeWidget_learn_click') } catch (e) {}
+	widgetNudgeOpen.value = false
+	go('/pagesA/widgets/widgets?from=home')
 }
 
-/** 合并新旧 Feed，按 id 去重，保留已 like 等本地态。 */
-
-function mergeFeedItems(incoming) {
-	if (!incoming?.length) return 0
-	const seen = new Set(list.value.map((q) => q.id))
-	const add = []
-	const likePatch = { ...liked.value }
-	for (const q of incoming) {
-		if (!q?.id || seen.has(q.id)) continue
-		seen.add(q.id)
-		add.push(q)
-		if (q.liked) likePatch[q.id] = true
-	}
-	if (!add.length) return 0
-	const room = Math.max(FEED_SOFT_CAP - list.value.length, 0)
-	const slice = add.slice(0, room)
-	list.value = list.value.concat(slice)
-	liked.value = likePatch
-	return slice.length
+function onDiscountContinue() {
+	closeDiscountNudge()
+	goVip('home_discount')
 }
 
-/** 静默补货 / 上拉加载更多：受软上限 FEED_SOFT_CAP 与 feedLoading/feedExhausted 并发锁约束 */
-async function fetchMoreFeed(pageSize = FEED_BATCH) {
-	if (feedLoading || feedExhausted) return 0
-	if (list.value.length >= FEED_SOFT_CAP) return 0
-	feedLoading = true
-	try {
-		const need = Math.min(pageSize, FEED_SOFT_CAP - list.value.length)
-		const res = await apiFeed({ pageSize: need })
-		const items = res.results?.list || []
-		if (!items.length) {
-			feedExhausted = true
-			return 0
-		}
-		const n = mergeFeedItems(items)
-		// 全是重复也视为本批无增量，避免死循环狂刷
-		if (n === 0) feedExhausted = true
-		return n
-	} catch (e) {
-		return 0
-	} finally {
-		feedLoading = false
-	}
+function onDiscountActivated() {
+	closeDiscountNudge()
+	onVipActivated()
 }
 
-/** 首屏就绪后后台静默预取有限轮次，写入缓存但不打断当前滑动 */
-async function silentPrefetchFeed() {
-	for (let i = 0; i < FEED_SILENT_ROUNDS; i++) {
-		if (list.value.length >= FEED_SOFT_CAP || feedExhausted) break
-		const n = await fetchMoreFeed(FEED_BATCH)
-		if (!n) break
-	}
+function onCheckinPopupVisible(v) {
+	onCheckinDialogVisible(v)
+	if (!v) tryShowHomePopups()
+}
+
+function onLikeSheetDismiss() {
+	closeLikeSheet()
+	tryShowHomePopups()
+}
+
+function onLikeSheetConfirm() {
+	try { logFirebaseEvent('like_popup_confirm_click') } catch (e) {}
+	onLikeSheetDismiss()
+}
+
+function onCheckinContinue() {
+	try { logFirebaseEvent('daily_checkin_continue_click') } catch (e) {}
+	checkinPopup.value = null
+}
+
+/** 首屏 ensureLogin 完成前禁止抢跑鉴权接口 */
+let homeReady = false
+/** 防止 hideTabBar/setStyle 触发的 onShow 重入狂刷曝光 */
+let lastHomeShowAt = 0
+
+onHide(() => {
+	settleFeedRead()
 	persistHomeCache()
-}
-
-/** 滑动接近末尾时触发 silentPrefetch，降低白屏。 */
-
-function maybePrefetchOnSwipe() {
-	const ahead = list.value.length - current.value - 1
-	if (ahead > FEED_LOW_WATER) return
-	if (list.value.length >= FEED_SOFT_CAP || feedExhausted || feedLoading) return
-	fetchMoreFeed(FEED_BATCH).then((n) => {
-		if (n) persistHomeCache()
-	})
-}
-
-/** 拉取新人点赞进度（如 0/5）；目标来自 newcomer_like_goal。 */
-
-async function loadNewcomer() {
-	const res = await apiNewcomerLike()
-	newcomer.value = {
-		...res.results,
-		visible: !!res.results.visible,
-	}
-	const seen = !!uni.getStorageSync('newcomer_sheet_seen')
-	if (newcomer.value.visible && !newcomer.value.completed && !seen) {
-		showLikeSheet.value = true
-		uni.setStorageSync('newcomer_sheet_seen', '1')
-		track('newcomer_like_sheet_show', { scene: 'auto' })
-	}
-}
-
-/** 将签到结果交给 localizeCheckinPopup 做 i18n 文案。 */
-
-function localizeCheckinPopupLocal(data) {
-	const miss = Number((config.value || {}).streak_miss_reset_days)
-	return localizeCheckinPopup(data, t, {
-		miss_reset_days: Number.isFinite(miss) && miss > 0 ? miss : undefined,
-	})
-}
-
-/**
- * 首页首开自动打卡：对接 /checkin/do/
- * - already：今日已打，只埋点不弹层
- * - scenario=revive：爱心冻结漏打日；restart：断签清零；normal：正常 +1
- * - popup 文案经 localizeCheckinPopup 转当前语言后再展示
- */
-async function runCheckin() {
-	try {
-		const res = await apiCheckinDo()
-		const data = res.results || {}
-		// 周条三态供弹层日历条使用
-		week.value = data.week || []
-		// 后端可能回写 streak / hearts / free_quota，同步本地会话
-		if (data.user) {
-			setUser(data.user)
-			user.value = data.user
-		}
-		if (!data.already) {
-			track('checkin_success', {
-				streak_days: data.streak_days,
-				granted_quota: data.granted_quota,
-				hit_cap: data.hit_cap,
-				vip_level: data.vip_level,
-				frozen_days: (data.frozen_days || []).length,
-			})
-			// 冻结成功单独埋点，便于漏斗看「爱心消耗」
-			if ((data.frozen_days || []).length) {
-				track('checkin_freeze', { used_hearts: (data.frozen_days || []).length })
-			}
-			if (data.scenario === 'restart') {
-				track('checkin_reset', { streak_days: data.streak_days })
-			}
-			// 运营可关 auto_popup；关闭时 data.popup 为 null
-			if (data.popup) {
-				checkinPopup.value = localizeCheckinPopupLocal(data)
-				track('checkin_show', { scene: 'auto' })
-			}
-		} else {
-			track('checkin_already')
-		}
-	} catch (e) {}
-}
-
-/**
- * 喜欢/取消喜欢：
- * 1) 乐观更新本地 liked map（立即红心）
- * 2) 喜欢时播音效 + 爆发动效
- * 3) 调 /content/like/；用返回的 newcomer_like 刷新 0/5 进度
- * 4) just_completed=true：播完成层，约 2.2s 后隐藏进度条（已完成不再展示）
- * 注意：取消喜欢会减少后端 current，但 completed 标记不回退
- */
-async function toggleLike(q) {
-	const next = !liked.value[q.id]
-	// 乐观 UI：不等接口回来先翻状态，避免滑动卡顿
-	liked.value = { ...liked.value, [q.id]: next }
-	if (next) {
-		playSfx('like')
-		burstShow.value = true
-		setTimeout(() => { burstShow.value = false }, 700)
-	}
-	const res = await apiLike(q.id, next)
-	track('quote_like', { content_id: q.id, action: next ? 'like' : 'unlike' })
-	const nl = res.results.newcomer_like
-	if (nl) {
-		// visible：未完成持续显示；刚完成这一次仍显示以便播动效
-		newcomer.value = { ...nl, visible: nl.visible && !nl.completed ? true : nl.just_completed }
-		track('newcomer_like_progress', { current: nl.current, goal: nl.goal })
-		if (nl.just_completed) {
-			showComplete.value = true
-			track('newcomer_like_complete')
-			setTimeout(() => {
-				showComplete.value = false
-				// 完成后隐藏顶栏进度，避免长期占位
-				newcomer.value.visible = false
-			}, 2200)
-			uni.showToast({
-				title: newcomerDone.value,
-				icon: 'none',
-				duration: 2500,
-			})
-		}
-	}
-}
-
-/** 更多菜单：不感兴趣 / 举报 / 收藏（Selah 底栏，非系统 ActionSheet）。 */
-
-function openMore(q) {
-	moreTarget.value = q
-	const items = [
-		{ code: 'dislike', label: t('dislike') },
-		{ code: 'collect', label: t('collect') },
-		{ code: 'report', label: t('report') },
-		{ code: 'share', label: t('share') },
-	]
-	if (q.audio_url) items.push({ code: 'listen', label: t('listen') || 'Listen' })
-	moreSheetItems.value = items
-	moreSheetOpen.value = true
-}
-
-async function onMoreSelect({ value }) {
-	const q = moreTarget.value
-	if (!q) return
-	if (value === 'dislike') {
-		await apiDislike(q.id)
-		track('quote_dislike', { content_id: q.id })
-		list.value = list.value.filter((x) => x.id !== q.id)
-		uni.showToast({ title: t('hide'), icon: 'none' })
-	} else if (value === 'collect') {
-		collectQuote(q)
-	} else if (value === 'report') {
-		reportTarget.value = q
-		reportSheetItems.value = reportReasons.value.map((r) => ({
-			code: r.value,
-			label: t(r.labelKey || REPORT_I18N[r.value] || 'report_other'),
-		}))
-		reportSheetOpen.value = true
-	} else if (value === 'share') {
-		goShare(q)
-	} else if (value === 'listen') {
-		playAudio(q)
-	}
-}
-
-async function onReportSelect({ value }) {
-	const q = reportTarget.value
-	if (!q) return
-	const reason = value || 'other'
-	await apiReport(q.id, reason)
-	track('quote_report', { content_id: q.id, reason })
-	uni.showToast({ title: t('reported'), icon: 'none' })
-}
-
-/** 收藏到选定文件夹。 */
-
-async function collectQuote(q) {
-	try {
-		const res = await apiFolders()
-		const folders = res.results || []
-		if (!folders.length) {
-			await apiCollect(q.id)
-			track('quote_collect', { content_id: q.id, action: 'collect' })
-			uni.showToast({ title: t('collected'), icon: 'none' })
-			return
-		}
-		folderTarget.value = q
-		folderList.value = folders
-		folderSheetItems.value = folders.map((f) => ({ code: String(f.id), label: f.name }))
-		folderSheetOpen.value = true
-	} catch (e) {
-		await apiCollect(q.id)
-		track('quote_collect', { content_id: q.id, action: 'collect' })
-		uni.showToast({ title: t('collected'), icon: 'none' })
-	}
-}
-
-async function onFolderSelect({ value }) {
-	const q = folderTarget.value
-	if (!q) return
-	const folderId = Number(value)
-	await apiCollect(q.id, folderId)
-	track('quote_collect', { content_id: q.id, action: 'collect', folder_id: folderId })
-	uni.showToast({ title: t('collected'), icon: 'none' })
-}
-
-/** 卡片滑动：切换索引、曝光、预取、停音频。 */
-
-function onSwipe(e) {
-	current.value = e.detail.current
-	const q = list.value[current.value]
-	if (q) {
-		apiExpose(q.id)
-		track('quote_expose', quoteExposeParams(q))
-		track('home_scroll', { loaded_count: list.value.length })
-		markDwell(q.id)
-	}
-	maybePrefetchOnSwipe()
-}
-
-/** 关闭绑定账号横幅并调 dismiss-bind-prompt。 */
-
-async function dismissBind() {
-	bindBanner.value = false
-	await apiDismissBindPrompt()
-	track('bind_prompt_dismiss', { scene: 'banner' })
-	const u = getUser()
-	u.bind_prompt_dismissed = true
-	setUser(u)
-}
-
-/** 展示绑定引导（新用户/未绑 OAuth）。 */
-
-function openBindBanner() {
-	track('bind_prompt_click', { scene: 'banner', target: 'settings' })
-	uni.navigateTo({ url: '/pagesA/settings/settings' })
-}
-
-/** 应用当前壁纸：本地快照秒开；无 token 时禁止拉需鉴权列表，避免抢跑 401。 */
-
-async function applyWallpaper(opts = {}) {
-	try {
-		const hasToken = !!uni.getStorageSync('token')
-		const snap = await resolveActiveWallpaper(user.value, {
-			...opts,
-			allowNetwork: hasToken && opts.allowNetwork !== false,
-		})
-		const url = wallpaperDisplayUrl(snap)
-		if (url) bgUrl.value = url
-	} catch (e) {}
-}
+})
 
 onShow(async () => {
 	hideNativeTabBar()
 	user.value = getUser()
-	if (user.value && (user.value.user_id || user.value.wallpaper_id)) {
-		// 仅本地缓存秒开；网络刷新留给 onMounted ensureLogin 之后
-		try { await applyWallpaper({ allowNetwork: false }) } catch (e) {}
+	if (!syncHomeLikesForAccount()) overlayPendingLikes()
+	if (homeReady) setCheckinSettled(false)
+	if (!homeReady) return
+	const now = Date.now()
+	const freshShow = now - lastHomeShowAt > 800
+	lastHomeShowAt = now
+	if (!freshShow) return
+	const pendingVipDismiss = Number(uni.getStorageSync('selah_vip_dismiss_content_id') || 0)
+	if (pendingVipDismiss) await handleVipDismissCooldown().catch(() => {})
+	// 没换主题：壁纸和语录保持离开前的样子，不重新请求
+	if (keepHomeLook()) {
+		if (bgVideoUrl.value) playWallpaperVideo('homeBgVideo')
+		exposeActiveQuote()
+		resumeFeedRead()
+		if (uni.getStorageSync('token')) loadNewcomer().catch(() => {})
+		runCheckin().catch(() => {}).then(() => tryShowHomePopups())
+		return
 	}
+	try { await applyWallpaper({ allowNetwork: false }) } catch (e) {}
+	const switched = await reloadHomeFeedIfStale().catch(() => false)
+	if (!switched) await hydratePinnedTopicQuotes().catch(() => {})
+	exposeActiveQuote()
+	if (uni.getStorageSync('token')) loadNewcomer().then(() => persistHomeCache()).catch(() => {})
+	runCheckin().catch(() => {}).then(() => tryShowHomePopups())
 })
 
 /**
  * 首页挂载顺序（刻意设计，勿随意调序）：
- * 1. 灌缓存秒开 → 2. ensureLogin → 3. 绑定弱提示 Banner
- * 4. app-config / 举报枚举 / 壁纸 → 5. 拉 Feed（有缓存则不再重复埋首曝）
- * 6. 新人喜欢进度 → 写缓存 → 静默预取 → 自动打卡（可关）
+ * 1. 灌缓存秒开 → 2. ensureLogin
+ * 3. app-config / 壁纸 → 4. 拉 Feed（有缓存则不再重复埋首曝）
+ * 5. 新人喜欢进度 → 写缓存 → 静默预取 → 进首页自动打卡并弹对勾
  */
 onMounted(async () => {
-	if (shouldForceLoginPage()) {
+	if (shouldForceLoginPage() || !hasLocalSession()) {
 		uni.reLaunch({ url: '/pagesA/welcome/welcome' })
 		return
 	}
 	// 1) 先灌缓存：网络慢时也能先滑已有语录
 	applyHomeCache(readPageCache(HOME_CACHE_KEY))
+	if (!syncHomeLikesForAccount()) overlayPendingLikes()
+	if (bgVideoUrl.value) playWallpaperVideo('homeBgVideo')
 	try {
 		await ensureLogin()
 		user.value = getUser()
-		// 未绑三方且未主动关闭 → 展示弱提示；不拦截 Feed
-		bindBanner.value = !user.value.google_bound && !user.value.apple_bound && !user.value.bind_prompt_dismissed
-		if (bindBanner.value) track('bind_prompt_show', { scene: 'banner' })
+		homeReady = true
+		if (!syncHomeLikesForAccount()) overlayPendingLikes()
 
 		try {
 			await loadWithCache(
@@ -709,44 +483,46 @@ onMounted(async () => {
 				{ getRevision: appConfigRevision },
 			)
 		} catch (e) {}
-		try {
-			// 举报理由：拉 enums 并缓存；失败时用上次缓存，再回落本地 REPORT_FALLBACK
-			await loadWithCache(
-				'report_reasons_v1',
-				async () => {
-					const enums = await apiContentEnums()
-					return (enums.results || {}).report_reasons || []
-				},
-				(reasons) => {
-					if (Array.isArray(reasons) && reasons.length) {
-						reportReasons.value = reasons.map((r) => ({
-							value: r.value,
-							labelKey: REPORT_I18N[r.value] || 'report_other',
-						}))
-					}
-				},
-			)
-		} catch (e) {}
-		await applyWallpaper({ allowNetwork: true })
-		const hadCache = list.value.length > 0
-		// 有缓存：后台静默刷 Feed，拉完直接替换；无缓存才等待首屏
-		const feedRefresh = loadFeed({ trackView: !hadCache }).then(() => {
+		// 主题没换：用离开前的壁纸和语录，不请求壁纸 / 语录接口
+		if (keepHomeLook()) {
+			if (bgVideoUrl.value) playWallpaperVideo('homeBgVideo')
+			exposeActiveQuote()
+			await loadNewcomer().catch(() => {})
 			persistHomeCache()
-			return silentPrefetchFeed()
-		})
-		if (!hadCache) {
-			await feedRefresh
+			runCheckin().catch(() => {}).then(() => tryShowHomePopups())
+			return
+		}
+		await applyWallpaper({ allowNetwork: true })
+		const forceQuote = peekHomeForceQuote()
+		const hadCache = list.value.length > 0
+		// 主题没更新且已有缓存：直接用本地语录，不请求 /content/quote/
+		if (hadCache && !homeFeedNeedsReload()) {
+			if (forceQuote) consumeHomeForceQuote()
+			exposeActiveQuote()
 		} else {
-			feedRefresh.catch(() => {})
+			const feedRefresh = loadFeed({ trackView: !hadCache, replace: !hadCache }).then(() => {
+				persistHomeCache()
+				if (forceQuote) consumeHomeForceQuote()
+				if (!getHomeFeedTopicId()) return silentPrefetchFeed()
+			})
+			if (!hadCache) {
+				await feedRefresh
+			} else {
+				feedRefresh.catch(() => {})
+				exposeActiveQuote()
+			}
 		}
 		await loadNewcomer()
 		persistHomeCache()
-		// 用户关了「打卡记录」则不自动 do；与后端 skipped 口径一致
-		if (user.value.checkin_record_enabled !== false) {
-			runCheckin().catch(() => {})
-		}
+		homeReady = true
+		runCheckin().catch(() => {}).then(() => tryShowHomePopups())
 	} catch (e) {
 		console.error('home init failed', e)
+		if (e && (e.code === 'NEED_LOGIN' || e.code === 'FORCE_LOGIN')) {
+			uni.reLaunch({ url: '/pagesA/welcome/welcome' })
+			return
+		}
+		if (uni.getStorageSync('token')) homeReady = true
 		// 无缓存且初始化失败才 toast，避免有缓存时吓人
 		if (!list.value.length) {
 			uni.showToast({ title: t('load_failed'), icon: 'none' })
@@ -755,11 +531,27 @@ onMounted(async () => {
 })
 </script>
 
+
+<style>
+/* 避免 page 默认浅底在回弹/TabBar 留白处露出来 */
+page {
+	height: 100%;
+	overflow: hidden;
+	background-color: #f5dfbc;
+}
+</style>
+
 <style scoped>
 .home {
-	position: relative;
-	height: 100vh;
+	position: fixed;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	width: auto;
+	height: auto;
 	overflow: hidden;
+	overscroll-behavior: none;
 	background-color: #fbf8f2;
 	background-image: linear-gradient(180deg, #b6badf 0%, #fff0d9 48%, #f5dfbc 100%);
 	color: #191919;
@@ -768,9 +560,35 @@ onMounted(async () => {
 	position: absolute;
 	left: 0;
 	top: 0;
+	z-index: 0;
 	width: 100%;
 	height: 100%;
-	opacity: 0.22;
+	opacity: 0.55;
+	pointer-events: none;
+}
+.bg.bg-video {
+	z-index: 0;
+	opacity: 1;
+}
+.bg.bg-video :deep(video),
+.bg.bg-video :deep(.uni-video-container),
+.bg.bg-video :deep(.uni-video-video) {
+	position: absolute !important;
+	left: 0 !important;
+	top: 0 !important;
+	width: 100% !important;
+	height: 100% !important;
+	object-fit: cover !important;
+	opacity: 1 !important;
+	background: transparent !important;
+	pointer-events: none !important;
+}
+.bg-video :deep(.uni-video-cover),
+.bg-video :deep(.uni-video-bar),
+.bg-video :deep(.uni-video-progress) {
+	display: none !important;
+	opacity: 0 !important;
+	pointer-events: none !important;
 }
 .veil {
 	position: absolute;
@@ -779,13 +597,16 @@ onMounted(async () => {
 	right: 0;
 	bottom: 0;
 	z-index: 1;
-	background: linear-gradient(180deg, rgba(251, 248, 242, 0.08), rgba(251, 248, 242, 0.42));
+	background: linear-gradient(180deg, rgba(251, 248, 242, 0.02), rgba(251, 248, 242, 0.16));
 	pointer-events: none;
+}
+.has-dyn-bg .veil {
+	background: linear-gradient(180deg, rgba(251, 248, 242, 0.2), rgba(251, 248, 242, 0.36));
 }
 /* 纵向按稿 812 比例（top %），避免 rpx 随屏宽拉伸导致竖向错位 */
 .top {
 	position: absolute;
-	z-index: 5;
+	z-index: 30;
 	top: 0;
 	left: 0;
 	right: 0;
@@ -798,8 +619,27 @@ onMounted(async () => {
 	align-items: center;
 	justify-content: space-between;
 	min-height: 88rpx;
+	pointer-events: auto;
+	transform: translateZ(0);
+}
+.top-left {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex-shrink: 0;
+}
+.top-left .glass-pill + .glass-pill {
+	margin-left: 16rpx;
+}
+.top-spacer {
+	width: 192rpx;
+	height: 88rpx;
+	flex-shrink: 0;
+	visibility: hidden;
 }
 .glass-pill {
+	position: relative;
+	z-index: 1;
 	width: 88rpx;
 	height: 88rpx;
 	flex-shrink: 0;
@@ -811,10 +651,12 @@ onMounted(async () => {
 	align-items: center;
 	justify-content: center;
 	box-sizing: border-box;
+	cursor: pointer;
 }
 .pill-img {
 	width: 48rpx;
 	height: 48rpx;
+	pointer-events: none;
 }
 .brand-wrap {
 	flex: 1;
@@ -828,7 +670,12 @@ onMounted(async () => {
 	font-weight: 700;
 	color: #191919;
 }
-/* 稿 6:1487 — 165×28 */
+/* 稿 6:1487 — 165×28；槽位常驻，进度条点满后只藏内容 */
+.progress-slot {
+	width: 330rpx;
+	height: 56rpx;
+	flex-shrink: 0;
+}
 .progress-pill {
 	width: 330rpx;
 	height: 56rpx;
@@ -847,6 +694,7 @@ onMounted(async () => {
 	height: 40rpx;
 	flex-shrink: 0;
 	margin-right: 8rpx;
+	pointer-events: none;
 }
 .progress-num {
 	font-size: 28rpx;
@@ -858,7 +706,7 @@ onMounted(async () => {
 .bar {
 	width: 172rpx;
 	height: 12rpx;
-	background: rgba(175, 178, 186, 0.55);
+	background: rgba(25, 25, 25, 0.22);
 	margin-left: 16rpx;
 	border-radius: 999rpx;
 	overflow: hidden;
@@ -866,17 +714,57 @@ onMounted(async () => {
 }
 .bar-fill {
 	height: 100%;
-	background: #c5c3e8;
+	background: #d97b8c;
 }
 .feed {
-	position: relative;
-	height: 100%;
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	width: auto;
+	height: auto;
 	z-index: 2;
+	background: transparent;
+}
+.feed :deep(uni-swiper),
+.feed :deep(uni-swiper-item),
+.feed :deep(.uni-swiper-wrapper),
+.feed :deep(.uni-swiper-slides),
+.feed :deep(.uni-swiper-slide-frame) {
+	background: transparent !important;
 }
 .card {
 	height: 100%;
+	width: 100%;
 	position: relative;
 	box-sizing: border-box;
+	overflow: hidden;
+	background-color: #fbf8f2;
+	background-image: linear-gradient(180deg, #b6badf 0%, #fff0d9 48%, #f5dfbc 100%);
+}
+.card.card-dyn {
+	background: transparent;
+}
+.card-bg {
+	position: absolute;
+	left: 0;
+	top: 0;
+	z-index: 0;
+	width: 100%;
+	height: 100%;
+	opacity: 0.55;
+	pointer-events: none;
+}
+.card-veil {
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 1;
+	background: linear-gradient(180deg, rgba(251, 248, 242, 0.02), rgba(251, 248, 242, 0.16));
+	pointer-events: none;
 }
 /* 稿 Frame 36：y=311/812 */
 .quote-block {
@@ -888,23 +776,67 @@ onMounted(async () => {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
+	pointer-events: none;
 }
-.lock-mask {
+.lock-hit {
 	position: absolute;
 	left: 48rpx;
 	right: 48rpx;
 	top: 42%;
-	padding: 32rpx;
+	z-index: 3;
+	padding: 40rpx 32rpx 32rpx;
 	background: rgba(251, 248, 242, 0.95);
 	border-radius: 32rpx;
+	border: 2rpx solid rgba(25, 25, 25, 0.06);
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	z-index: 3;
-	border: 2rpx solid rgba(25, 25, 25, 0.06);
+	box-sizing: border-box;
 }
-.lock-text { color: #5c5c5c; font-size: 24rpx; }
-.lock-cta { color: #191919; margin-top: 12rpx; font-size: 28rpx; font-weight: 600; }
+.lock-hit-close {
+	position: absolute;
+	top: 12rpx;
+	right: 12rpx;
+	width: 56rpx;
+	height: 56rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 2;
+}
+.lock-hit-close-ico {
+	width: 36rpx;
+	height: 36rpx;
+	opacity: 0.55;
+}
+.lock-hit-body {
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+.lock-hit-text {
+	color: #5c5c5c;
+	font-size: 24rpx;
+}
+.lock-hit-cta-row {
+	margin-top: 12rpx;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	gap: 4rpx;
+}
+.lock-hit-cta {
+	color: #191919;
+	font-size: 28rpx;
+	font-weight: 600;
+}
+.lock-hit-arrow {
+	width: 28rpx;
+	height: 28rpx;
+	opacity: 0.85;
+}
 .quote {
 	font-family: "SelahDisplay", "Libre Baskerville", "Times New Roman", Georgia, serif;
 	font-size: 48rpx;
@@ -924,18 +856,20 @@ onMounted(async () => {
 }
 .quote-hit {
 	position: absolute;
-	left: 48rpx;
-	right: 48rpx;
-	top: 30%;
-	bottom: 22%;
-	z-index: 1;
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+	z-index: 2;
+	pointer-events: none;
 }
 /* 稿 Frame 41：y=662，高 36，间距 40 */
 .mid-actions {
 	position: absolute;
 	left: 0;
 	right: 0;
-	top: calc(100% * 662 / 812);
+	top: min(calc(100% * 662 / 812), calc(100% - 88rpx - 72rpx - 40rpx - constant(safe-area-inset-bottom)));
+	top: min(calc(100% * 662 / 812), calc(100% - 88rpx - 72rpx - 40rpx - env(safe-area-inset-bottom)));
 	bottom: auto;
 	height: 72rpx;
 	display: flex;
@@ -944,6 +878,7 @@ onMounted(async () => {
 	align-items: center;
 	z-index: 7;
 	pointer-events: auto;
+	transform: translateZ(0);
 }
 .icon-btn {
 	width: 72rpx;
@@ -956,6 +891,7 @@ onMounted(async () => {
 .act-img {
 	width: 72rpx;
 	height: 72rpx;
+	pointer-events: none;
 }
 .icon {
 	font-size: 40rpx;
@@ -970,7 +906,8 @@ onMounted(async () => {
 	z-index: 6;
 	left: 32rpx;
 	right: 32rpx;
-	top: calc(100% * 734 / 812);
+	top: min(calc(100% * 734 / 812), calc(100% - 88rpx - 16rpx - constant(safe-area-inset-bottom)));
+	top: min(calc(100% * 734 / 812), calc(100% - 88rpx - 16rpx - env(safe-area-inset-bottom)));
 	bottom: auto;
 	height: 88rpx;
 	display: flex;
@@ -978,6 +915,8 @@ onMounted(async () => {
 	align-items: center;
 	justify-content: space-between;
 	filter: drop-shadow(0 8rpx 40rpx rgba(0, 0, 0, 0.12));
+	transform: translateZ(0);
+	pointer-events: auto;
 }
 .dock .prayer {
 	width: 190rpx;
@@ -987,30 +926,6 @@ onMounted(async () => {
 .prayer-text {
 	margin-left: 8rpx;
 	font-size: 28rpx;
-	color: #191919;
-}
-.bind-banner {
-	position: absolute;
-	z-index: 8;
-	left: 24rpx;
-	right: 24rpx;
-	bottom: 16%;
-	padding: 20rpx 28rpx;
-	background: rgba(255, 255, 255, 0.92);
-	border-radius: 32rpx;
-	display: flex;
-	flex-direction: row;
-	align-items: center;
-	border: 2rpx solid rgba(25, 25, 25, 0.06);
-}
-.bind-text {
-	flex: 1;
-	font-size: 24rpx;
-	color: #191919;
-}
-.bind-x {
-	padding: 8rpx 16rpx;
-	font-size: 32rpx;
 	color: #191919;
 }
 .sheet {
